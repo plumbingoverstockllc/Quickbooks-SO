@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import hashlib
+import sys
+import threading
 import subprocess
 import tempfile
 import urllib.parse
@@ -20,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.46 Beta"
+APP_VERSION = "v0.9.47.1 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -337,7 +339,7 @@ class SalesOrderApp:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
             except ValueError:
@@ -348,7 +350,7 @@ class SalesOrderApp:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
             except ValueError:
@@ -396,15 +398,91 @@ class SalesOrderApp:
         temp_dir.mkdir(parents=True, exist_ok=True)
         filename = Path(urllib.parse.urlparse(url).path).name or "QB-Sales-Order-Converter-Setup.exe"
         installer_path = temp_dir / filename
-        urllib.request.urlretrieve(url, installer_path)
+        progress_dialog = tk.Toplevel(self.root)
+        progress_dialog.title("Installing Update")
+        progress_dialog.geometry("430x150")
+        progress_dialog.resizable(False, False)
+        progress_dialog.transient(self.root)
+        progress_dialog.grab_set()
+        progress_dialog.protocol("WM_DELETE_WINDOW", lambda: None)
 
-        if expected_sha256:
-            digest = hashlib.sha256(installer_path.read_bytes()).hexdigest().lower()
-            if digest != expected_sha256:
-                raise RuntimeError("Downloaded update failed checksum validation.")
+        status_var = tk.StringVar(value="Downloading update...")
+        progress_var = tk.DoubleVar(value=0.0)
+        ttk.Label(progress_dialog, textvariable=status_var, wraplength=390).pack(anchor="w", padx=18, pady=(18, 8))
+        progress_bar = ttk.Progressbar(progress_dialog, mode="determinate", maximum=100, variable=progress_var)
+        progress_bar.pack(fill="x", padx=18, pady=(0, 8))
+        pct_label = ttk.Label(progress_dialog, text="0%")
+        pct_label.pack(anchor="e", padx=18)
 
-        subprocess.Popen([str(installer_path), "/VERYSILENT", "/NORESTART"])
-        self.root.after(300, self.root.destroy)
+        def update_ui(status: str | None = None, pct: float | None = None) -> None:
+            def _apply():
+                if status is not None:
+                    status_var.set(status)
+                if pct is not None:
+                    bounded = max(0.0, min(100.0, pct))
+                    progress_var.set(bounded)
+                    pct_label.config(text=f"{int(round(bounded))}%")
+            self.root.after(0, _apply)
+
+        def fail_ui(message: str) -> None:
+            def _apply():
+                if progress_dialog.winfo_exists():
+                    progress_dialog.destroy()
+                messagebox.showerror("Update Failed", message)
+                self._set_status("Update failed. Please try again.")
+            self.root.after(0, _apply)
+
+        def restart_ui() -> None:
+            def _apply():
+                if progress_dialog.winfo_exists():
+                    progress_dialog.destroy()
+                self._set_status("Update complete. Reopening app...")
+                restart_cmd = self._build_restart_command()
+                subprocess.Popen(restart_cmd)
+                self.root.destroy()
+            self.root.after(0, _apply)
+
+        def worker() -> None:
+            try:
+                update_ui("Downloading update...", 2)
+                with urllib.request.urlopen(url, timeout=30) as response, installer_path.open("wb") as out_file:
+                    total_bytes = int(response.headers.get("Content-Length", "0") or "0")
+                    downloaded = 0
+                    while True:
+                        chunk = response.read(1024 * 256)
+                        if not chunk:
+                            break
+                        out_file.write(chunk)
+                        downloaded += len(chunk)
+                        if total_bytes > 0:
+                            pct = 2 + (downloaded / total_bytes) * 78
+                            update_ui(pct=pct)
+
+                update_ui("Verifying update package...", 84)
+                if expected_sha256:
+                    digest = hashlib.sha256(installer_path.read_bytes()).hexdigest().lower()
+                    if digest != expected_sha256:
+                        raise RuntimeError("Downloaded update failed checksum validation.")
+
+                update_ui("Installing update...", 92)
+                installer = subprocess.Popen(
+                    [str(installer_path), "/VERYSILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS"]
+                )
+                exit_code = installer.wait()
+                if exit_code != 0:
+                    raise RuntimeError(f"Installer exited with code {exit_code}.")
+
+                update_ui("Update complete. Reopening...", 100)
+                restart_ui()
+            except Exception as exc:
+                fail_ui(str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _build_restart_command(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return [sys.executable]
+        return [sys.executable, str(Path(__file__).resolve())]
 
     def _load_settings(self) -> dict:
         if not SETTINGS_PATH.exists():
