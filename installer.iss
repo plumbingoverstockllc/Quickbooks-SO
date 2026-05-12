@@ -1,7 +1,7 @@
 #define MyAppName "QB Sales Order Converter"
-#define MyAppVersion "0.9.45-beta"
+#define MyAppVersion "0.9.46-beta"
 #define MyAppPublisher "Eliezer Labkowski"
-#define MyAppExeName "QB Sales Order Converter Portable v9.45.exe"
+#define MyAppExeName "QB Sales Order Converter Portable v9.46.exe"
 
 [Setup]
 AppId={{A95D8E38-BAAD-46F2-9666-C3A808B2C3B6}

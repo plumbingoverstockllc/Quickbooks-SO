@@ -1,6 +1,6 @@
 {
-  "version": "0.9.45",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.45/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "63ac549d5f5b123d711eb671e6f01e3961b9c321b265399e9189a813275905ad",
-  "notes": "Startup update checks, DD-MM-YYYY date defaults, and full row editor field coverage."
+  "version": "0.9.46",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.46/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "",
+  "notes": "Version bump to v0.9.46."
 }
