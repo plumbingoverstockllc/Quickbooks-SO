@@ -1,0 +1,6 @@
+{
+  "version": "0.9.44",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.44/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "574bd15a9daae0311ad4cebb2d929fda92db6cc4a7652c3c6edf40a883caee3a",
+  "notes": "UI improvements, QuickBooks connect workflow, output editing, and export date format updates."
+}
