@@ -160,27 +160,9 @@ class PricingRulesDialog(tk.Toplevel):
 
 
 class RowEditorDialog(tk.Toplevel):
-    EDIT_FIELDS = [
-        "Brand",
-        "SKU",
-        "productName",
-        "MSRP",
-        "Qty",
-        "Price",
-        "Cost",
-    ]
-    OUTPUT_EDIT_FIELDS = [
-        "Product/Service",
-        "Product/Service Description",
-        "Product/Service Quantity",
-        "Product/Service Rate",
-        "Product/Service Sales Tax Code",
-        "Currency",
-    ]
-
     def __init__(self, parent: tk.Tk, source_row: dict, output_row: dict, excel_line_number: int) -> None:
         super().__init__(parent)
-        self.title(f"Edit Source Row (Excel Line {excel_line_number})")
+        self.title(f"Edit Row (Excel Line {excel_line_number})")
         self.geometry("840x600")
         self.resizable(True, True)
         self.result = None
@@ -214,7 +196,7 @@ class RowEditorDialog(tk.Toplevel):
         ttk.Label(header_line, text=f"SO: {output_row.get('Sales Order No', '')}").pack(side="left")
         ttk.Label(header_line, text=f"Customer: {output_row.get('Customer', '')}").pack(side="left", padx=(10, 0))
 
-        for col in self.OUTPUT_EDIT_FIELDS:
+        for col, value in output_row.items():
             value = output_row.get(col, "")
             row = ttk.Frame(out_inner)
             row.pack(fill="x", pady=3)
@@ -233,8 +215,7 @@ class RowEditorDialog(tk.Toplevel):
         scrollbar.pack(side="right", fill="y")
 
         ttk.Label(inner, text=f"Edit source fields for Excel line {excel_line_number}", style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
-        for col in self.EDIT_FIELDS:
-            value = source_row.get(col, "")
+        for col, value in source_row.items():
             row = ttk.Frame(inner)
             row.pack(fill="x", pady=3)
             ttk.Label(row, text=col, width=34).pack(side="left")
@@ -255,20 +236,12 @@ class RowEditorDialog(tk.Toplevel):
         source_values = {col: var.get().strip() for col, var in self.source_vars.items()}
         output_values = {col: var.get().strip() for col, var in self.output_vars.items()}
         try:
-            qty_raw = source_values.get("Qty", "1")
-            source_values["Qty"] = max(1, int(float(qty_raw or "1")))
-            source_values["MSRP"] = float(source_values.get("MSRP", "0") or "0")
-            if source_values.get("Price", ""):
-                source_values["Price"] = float(source_values.get("Price", "0") or "0")
-            if source_values.get("Cost", ""):
-                source_values["Cost"] = float(source_values.get("Cost", "0") or "0")
-
             out_qty_raw = output_values.get("Product/Service Quantity", "1")
             output_values["Product/Service Quantity"] = max(1, int(float(out_qty_raw or "1")))
             out_rate_raw = output_values.get("Product/Service Rate", "0")
             output_values["Product/Service Rate"] = round(float(out_rate_raw or "0"), 2)
         except ValueError:
-            messagebox.showerror("Invalid row values", "Qty/MSRP/Price/Cost and output Quantity/Rate must be numeric.")
+            messagebox.showerror("Invalid row values", "Output Quantity/Rate must be numeric.")
             return
         self.result = {"source": source_values, "output": output_values}
         self.destroy()
@@ -300,8 +273,16 @@ class SalesOrderApp:
         self.output_path_var = tk.StringVar(value=self.settings.get("output_path", DEFAULT_OUTPUT))
         self.customer_var = tk.StringVar(value=self.settings.get("customer", ""))
         self.sales_order_no_var = tk.StringVar(value=self.settings.get("sales_order_no", ""))
-        self.sales_order_date_var = tk.StringVar(value=self.settings.get("sales_order_date", datetime.now().strftime("%Y-%m-%d")))
-        self.due_date_var = tk.StringVar(value=self.settings.get("due_date", datetime.now().strftime("%Y-%m-%d")))
+        self.sales_order_date_var = tk.StringVar(
+            value=self._normalize_date_for_display(
+                self.settings.get("sales_order_date", datetime.now().strftime("%d-%m-%Y"))
+            )
+        )
+        self.due_date_var = tk.StringVar(
+            value=self._normalize_date_for_display(
+                self.settings.get("due_date", datetime.now().strftime("%d-%m-%Y"))
+            )
+        )
         self.terms_var = tk.StringVar(value=self.settings.get("terms", "Prepaid"))
         self.shipping_method_var = tk.StringVar(value=self.settings.get("shipping_method", "Standard Ground"))
         self.memo_var = tk.StringVar(value=self.settings.get("memo", ""))
@@ -318,6 +299,7 @@ class SalesOrderApp:
 
         self._build_layout()
         self._build_menu()
+        self.root.after(1200, self.check_for_updates_on_startup)
 
     def _configure_styles(self) -> None:
         self.style.configure(".", font=("Segoe UI", 10))
@@ -351,7 +333,29 @@ class SalesOrderApp:
             nums.append(0)
         return tuple(nums)
 
-    def check_for_updates(self) -> None:
+    def _normalize_date_for_qb(self, date_text: str) -> str:
+        date_text = (date_text or "").strip()
+        if not date_text:
+            return ""
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
+            except ValueError:
+                continue
+        raise ValueError(f"Invalid date format: {date_text}. Use DD-MM-YYYY.")
+
+    def _normalize_date_for_display(self, date_text: str) -> str:
+        date_text = (date_text or "").strip()
+        if not date_text:
+            return ""
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
+            except ValueError:
+                continue
+        raise ValueError(f"Invalid date format: {date_text}. Use DD-MM-YYYY.")
+
+    def check_for_updates(self, silent: bool = False) -> None:
         try:
             with urllib.request.urlopen(UPDATE_INFO_URL, timeout=10) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
@@ -366,7 +370,9 @@ class SalesOrderApp:
             current_version = self._version_tuple(APP_VERSION)
             available_version = self._version_tuple(latest_version)
             if available_version <= current_version:
-                messagebox.showinfo("No Updates", f"You're up to date on {APP_VERSION}.")
+                if not silent:
+                    messagebox.showinfo("No Updates", f"You're up to date on {APP_VERSION}.")
+                self._set_status(f"Update check complete: {APP_VERSION} is current.")
                 return
 
             prompt = f"New version available: v{latest_version}\nCurrent: {APP_VERSION}\n\nInstall now?"
@@ -377,7 +383,13 @@ class SalesOrderApp:
 
             self._download_and_run_update(download_url, sha256_hash)
         except Exception as exc:
-            messagebox.showerror("Update Check Failed", str(exc))
+            if not silent:
+                messagebox.showerror("Update Check Failed", str(exc))
+            self._set_status("Update check failed. Use 'Check for Updates' to retry.")
+
+    def check_for_updates_on_startup(self) -> None:
+        self._set_status("Checking for updates...")
+        self.check_for_updates(silent=True)
 
     def _download_and_run_update(self, url: str, expected_sha256: str) -> None:
         temp_dir = Path(tempfile.gettempdir()) / "qb_so_updates"
@@ -466,6 +478,7 @@ class SalesOrderApp:
         qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         ttk.Button(qb_bar, text="Connect to QuickBooks Desktop", command=self.connect_quickbooks, style="Accent.TButton").pack(side="left")
         ttk.Button(qb_bar, text="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide, style="Quiet.TButton").pack(side="left", padx=8)
+        ttk.Button(qb_bar, text="Check for Updates", command=self.check_for_updates, style="Quiet.TButton").pack(side="left", padx=8)
         ttk.Label(qb_bar, textvariable=self.qb_status_var, style="QbStatus.TLabel").pack(side="left", padx=10)
 
         actions = ttk.Frame(root, padding=(12, 0, 12, 10))
@@ -593,6 +606,8 @@ class SalesOrderApp:
                 continue
             for key, value in override.items():
                 if key in self.output_df.columns:
+                    if key in ("Sales Order Date", "Due Date") and str(value).strip():
+                        value = self._normalize_date_for_display(str(value))
                     self.output_df.at[row_idx, key] = value
 
     def _browse_source(self):
@@ -772,6 +787,12 @@ class SalesOrderApp:
             messagebox.showerror("Pricing Rules Error", str(exc))
 
     def _rebuild_previews_from_source(self):
+        sales_date_text = self.sales_order_date_var.get().strip()
+        due_date_text = self.due_date_var.get().strip()
+        if sales_date_text:
+            self.sales_order_date_var.set(self._normalize_date_for_display(sales_date_text))
+        if due_date_text:
+            self.due_date_var.set(self._normalize_date_for_display(due_date_text))
         settings = OrderSettings(
             customer_name=self.customer_var.get().strip(),
             sales_order_no=self.sales_order_no_var.get().strip(),
@@ -904,8 +925,8 @@ class SalesOrderApp:
             result = QuickBooksClient().upload_sales_order(
                 customer_name=self.customer_var.get().strip(),
                 sales_order_no=self.sales_order_no_var.get().strip(),
-                txn_date=self.sales_order_date_var.get().strip(),
-                due_date=self.due_date_var.get().strip(),
+                txn_date=self._normalize_date_for_qb(self.sales_order_date_var.get().strip()),
+                due_date=self._normalize_date_for_qb(self.due_date_var.get().strip()),
                 terms=self.terms_var.get().strip() or "Prepaid",
                 shipping_method=self.shipping_method_var.get().strip() or "Standard Ground",
                 memo=self.memo_var.get().strip(),
