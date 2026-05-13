@@ -1,6 +1,6 @@
 {
-  "version": "0.9.57",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.57/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "d8fc7a3c4b72ebe7d51550ae7ca34dcdb778bca91e9ddb645740f6c31ae09bea",
-  "notes": "Built against Python 3.12 to fix the python314.dll load error during update. Tightened layout: smaller header, compact form rows, and a much taller Preview pane."
+  "version": "0.9.58",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.58/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "db307b1e4e3bc78ee9c73ae5d11e17510156ae68b7c180b296482433a47dae7d",
+  "notes": "Fix: PyInstaller bundle now uses --collect-all for numpy/pandas so numpy 2.x C-extensions load on launch (replaces the No module named 'numpy._core._exceptions' crash in v0.9.57)."
 }

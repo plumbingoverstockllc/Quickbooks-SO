@@ -8,8 +8,14 @@ if not exist "%PY%" set "PY=python"
 
 "%PY%" -m pip install --user -r requirements.txt
 "%PY%" -m pip install --user pyinstaller
-"%PY%" -m PyInstaller --noconfirm --windowed --name "QB Sales Order Converter" app.py
-"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "QB Sales Order Converter" app.py
+
+REM --collect-all numpy/pandas avoids "No module named 'numpy._core._exceptions'"
+REM at runtime — numpy 2.x reorganized its internals and the default PyInstaller
+REM hook misses several C-extension submodules.
+set "COLLECT=--collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd"
+
+"%PY%" -m PyInstaller --noconfirm --windowed --name "QB Sales Order Converter" %COLLECT% app.py
+"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "QB Sales Order Converter" %COLLECT% app.py
 
 if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (
   "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer.iss"
