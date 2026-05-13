@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ctypes
 import html
 import logging
+import os
 import re
 import subprocess
 import traceback
@@ -36,6 +38,92 @@ def _is_quickbooks_running() -> bool:
         return False
     output = result.stdout.lower()
     return any(name in output for name in _QB_PROCESS_NAMES)
+
+
+def _is_process_elevated(pid: int) -> str:
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    TOKEN_QUERY = 0x0008
+    TokenElevation = 20
+    process_handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+    if not process_handle:
+        return "unknown"
+    try:
+        token_handle = ctypes.c_void_p()
+        if not ctypes.windll.advapi32.OpenProcessToken(process_handle, TOKEN_QUERY, ctypes.byref(token_handle)):
+            return "unknown"
+        try:
+            elevation = ctypes.c_ulong()
+            size = ctypes.c_ulong()
+            ok = ctypes.windll.advapi32.GetTokenInformation(
+                token_handle,
+                TokenElevation,
+                ctypes.byref(elevation),
+                ctypes.sizeof(elevation),
+                ctypes.byref(size),
+            )
+            if not ok:
+                return "unknown"
+            return "elevated" if elevation.value else "standard"
+        finally:
+            ctypes.windll.kernel32.CloseHandle(token_handle)
+    finally:
+        ctypes.windll.kernel32.CloseHandle(process_handle)
+
+
+def _current_process_elevation() -> str:
+    return _is_process_elevated(os.getpid())
+
+
+def _quickbooks_process_details() -> list[dict]:
+    details: list[dict] = []
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        for raw_line in (result.stdout or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            parts = [p.strip().strip('"') for p in line.split('","')]
+            if len(parts) < 2:
+                continue
+            exe_name = parts[0].lower().strip('"')
+            if exe_name not in _QB_PROCESS_NAMES:
+                continue
+            try:
+                pid = int(parts[1].strip('"'))
+            except Exception:
+                pid = -1
+            details.append(
+                {
+                    "name": exe_name,
+                    "pid": pid,
+                    "elevation": _is_process_elevated(pid) if pid > 0 else "unknown",
+                }
+            )
+    except Exception:
+        return []
+    return details
+
+
+def _runtime_context_note() -> str:
+    qb_details = _quickbooks_process_details()
+    qb_summary = (
+        ", ".join(
+            f"{row['name']} pid={row['pid']} elevation={row['elevation']}"
+            for row in qb_details
+        )
+        if qb_details
+        else "none detected"
+    )
+    return (
+        f"App PID={os.getpid()} elevation={_current_process_elevation()}; "
+        f"QuickBooks processes={len(qb_details)} [{qb_summary}]"
+    )
 
 
 def _normalize_company_path(path: str) -> str:
@@ -96,6 +184,8 @@ class QuickBooksClient:
 
         if qb_already_running:
             log.error("connect(): QB is running but attach failed; path-based launch fallback is disabled")
+            context_note = _runtime_context_note()
+            log.error("connect(): context diagnostics: %s", context_note)
             self.close()
             raise RuntimeError(
                 "QuickBooks Desktop is running, but this app could not attach to the open "
@@ -104,10 +194,13 @@ class QuickBooksClient:
                 "\"No Company Open\" / login screen, or this app is running in a different "
                 "Windows/UAC context than QuickBooks."
                 f"\n\nAttach details: {attach_error}"
+                f"\nContext: {context_note}"
             )
 
         # Never launch/open QuickBooks as a fallback from this app.
         log.error("connect(): QB not running or not attachable; launch fallback disabled")
+        context_note = _runtime_context_note()
+        log.error("connect(): context diagnostics: %s", context_note)
         self.close()
         raise RuntimeError(
             "Could not connect to QuickBooks Desktop. This app is configured to attach only "
@@ -115,6 +208,7 @@ class QuickBooksClient:
             "as a fallback.\n\nOpen QuickBooks manually, open/login to the target company file, "
             "and ensure this app runs under the same Windows user and UAC elevation level.\n\n"
             f"Details: {attach_error}"
+            f"\nContext: {context_note}"
         )
 
     def close(self) -> None:
