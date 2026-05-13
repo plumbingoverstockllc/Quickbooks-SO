@@ -22,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.47.2 Beta"
+APP_VERSION = "v0.9.47.3 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -168,6 +168,8 @@ class RowEditorDialog(tk.Toplevel):
         self.geometry("840x600")
         self.resizable(True, True)
         self.result = None
+        self._output_canvas: tk.Canvas | None = None
+        self._source_canvas: tk.Canvas | None = None
 
         wrapper = ttk.Frame(self, padding=12)
         wrapper.pack(fill="both", expand=True)
@@ -191,6 +193,7 @@ class RowEditorDialog(tk.Toplevel):
         out_canvas.configure(yscrollcommand=out_scroll.set)
         out_canvas.pack(side="left", fill="both", expand=True)
         out_scroll.pack(side="right", fill="y")
+        self._output_canvas = out_canvas
 
         header_line = ttk.Frame(out_inner)
         header_line.pack(fill="x", pady=(0, 8))
@@ -215,6 +218,7 @@ class RowEditorDialog(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+        self._source_canvas = canvas
 
         ttk.Label(inner, text=f"Edit source fields for Excel line {excel_line_number}", style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
         for col, value in source_row.items():
@@ -233,6 +237,35 @@ class RowEditorDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<MouseWheel>", self._on_mouse_wheel, add="+")
+        self.bind("<Button-4>", self._on_mouse_wheel, add="+")
+        self.bind("<Button-5>", self._on_mouse_wheel, add="+")
+
+    def _resolve_target_canvas(self, widget) -> tk.Canvas | None:
+        while widget is not None:
+            if widget == self._output_canvas:
+                return self._output_canvas
+            if widget == self._source_canvas:
+                return self._source_canvas
+            widget = widget.master
+        return None
+
+    def _on_mouse_wheel(self, event):
+        hovered_widget = self.winfo_containing(event.x_root, event.y_root)
+        target_canvas = self._resolve_target_canvas(hovered_widget)
+        if target_canvas is None:
+            return
+        if hasattr(event, "delta") and event.delta:
+            step = int(-event.delta / 120)
+        elif getattr(event, "num", None) == 4:
+            step = -1
+        elif getattr(event, "num", None) == 5:
+            step = 1
+        else:
+            step = 0
+        if step:
+            target_canvas.yview_scroll(step, "units")
+            return "break"
 
     def _save(self):
         source_values = {col: var.get().strip() for col, var in self.source_vars.items()}
@@ -803,10 +836,17 @@ class SalesOrderApp:
         self.root.wait_window(dlg)
         if dlg.result is None:
             return
-        for col, value in dlg.result["source"].items():
-            self.source_df.at[source_row_index, col] = value
-        self.output_overrides[str(source_row_index)] = dlg.result["output"]
-        self._rebuild_previews_from_source()
+        try:
+            for col, value in dlg.result["source"].items():
+                self.source_df.at[source_row_index, col] = value
+            self.output_overrides[str(source_row_index)] = dlg.result["output"]
+            self._rebuild_previews_from_source()
+            self._set_status(f"Saved row updates for Excel line {int(source_row_index) + 2}.")
+        except Exception as exc:
+            messagebox.showerror(
+                "Save Row Error",
+                f"Could not save row changes.\n\n{exc}",
+            )
 
     def _validate_settings(self):
         required = {
