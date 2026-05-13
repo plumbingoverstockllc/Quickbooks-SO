@@ -38,17 +38,6 @@ def _is_quickbooks_running() -> bool:
     return any(name in output for name in _QB_PROCESS_NAMES)
 
 
-def _is_no_company_open_error(exc: Exception | None) -> bool:
-    if exc is None:
-        return False
-    text = str(exc).lower()
-    return (
-        "if the quickbooks company data file is not open" in text
-        or "must include the name of the data file" in text
-        or "-2147220457" in text
-    )
-
-
 def _normalize_company_path(path: str) -> str:
     normalized = (path or "").strip().replace("/", "\\")
     return normalized
@@ -105,38 +94,8 @@ class QuickBooksClient:
                 if attach_error is None:
                     attach_error = exc
 
-        launch_error = None
-        # If QB is running but appears to be at "No Company Open", we can safely
-        # attempt a path-based BeginSession to open the configured company file.
-        # This fixes the common "QB is open and waiting" state where attach-only
-        # fails with -2147220457.
         if qb_already_running:
-            if self.company_file_path and _is_no_company_open_error(attach_error):
-                log.warning(
-                    "connect(): QB is running but no company is open; attempting configured path=%r",
-                    self.company_file_path,
-                )
-                for open_mode in (2, 0, 1):
-                    try:
-                        log.debug(
-                            "connect(): BeginSession(path=%r, mode=%d) while QB already running",
-                            self.company_file_path,
-                            open_mode,
-                        )
-                        self._ticket = self._rp.BeginSession(self.company_file_path, open_mode)
-                        log.info("connect(): opened configured company file in running QB (mode=%d)", open_mode)
-                        return
-                    except Exception as exc:
-                        log.warning(
-                            "connect(): BeginSession(path=%r, mode=%d) while QB running failed — %s",
-                            self.company_file_path,
-                            open_mode,
-                            exc,
-                        )
-                        if launch_error is None:
-                            launch_error = exc
-
-            log.error("connect(): QB is running but attach failed; no successful safe recovery path")
+            log.error("connect(): QB is running but attach failed; path-based launch fallback is disabled")
             self.close()
             raise RuntimeError(
                 "QuickBooks Desktop is running, but this app could not attach to the open "
@@ -145,45 +104,17 @@ class QuickBooksClient:
                 "\"No Company Open\" / login screen, or this app is running in a different "
                 "Windows/UAC context than QuickBooks."
                 f"\n\nAttach details: {attach_error}"
-                + (f"\nLaunch details: {launch_error}" if launch_error else "")
             )
 
-        # No QB process detected — fall back to launching it via the saved path.
-        if self.company_file_path:
-            for open_mode in (2, 0, 1):
-                try:
-                    log.debug(
-                        "connect(): BeginSession(path=%r, mode=%d)",
-                        self.company_file_path,
-                        open_mode,
-                    )
-                    self._ticket = self._rp.BeginSession(self.company_file_path, open_mode)
-                    log.info("connect(): launched QB with saved path (mode=%d)", open_mode)
-                    return
-                except Exception as exc:
-                    log.warning(
-                        "connect(): BeginSession(path=%r, mode=%d) failed — %s",
-                        self.company_file_path,
-                        open_mode,
-                        exc,
-                    )
-                    if launch_error is None:
-                        launch_error = exc
-        else:
-            log.warning("connect(): no company_file_path set, cannot launch QB")
-
-        log.error("connect(): all attempts failed (attach=%s, launch=%s)", attach_error, launch_error)
+        # Never launch/open QuickBooks as a fallback from this app.
+        log.error("connect(): QB not running or not attachable; launch fallback disabled")
         self.close()
-        hint = ""
-        if not self.company_file_path:
-            hint = (
-                "\n\nTip: set the QuickBooks Company File (.QBW) path in the app's Configuration "
-                "card so it can open the file directly when QuickBooks isn't running."
-            )
         raise RuntimeError(
-            "Could not connect to QuickBooks Desktop. Open QuickBooks and your company file first, "
-            "then run this app with the same Windows user/session as QuickBooks."
-            f"{hint}\n\nDetails: {launch_error or attach_error}"
+            "Could not connect to QuickBooks Desktop. This app is configured to attach only "
+            "to an already-open QuickBooks company session and will not launch/open QuickBooks "
+            "as a fallback.\n\nOpen QuickBooks manually, open/login to the target company file, "
+            "and ensure this app runs under the same Windows user and UAC elevation level.\n\n"
+            f"Details: {attach_error}"
         )
 
     def close(self) -> None:
