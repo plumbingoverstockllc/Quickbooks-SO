@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import hashlib
 import threading
 import subprocess
@@ -21,7 +22,8 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.54 Beta"
+APP_VERSION = "v0.9.55 Beta"
+UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -804,22 +806,60 @@ class SalesOrderApp:
                 continue
         raise ValueError(f"Invalid date format: {date_text}. Use MM/DD/YYYY.")
 
-    def check_for_updates(self, silent: bool = False) -> None:
+    def _fetch_release_info(self) -> dict:
+        """Fetch latest release info from GitHub Releases API (uncached); fall back to raw JSON feed."""
         try:
-            cache_bust_url = f"{UPDATE_INFO_URL}?t={int(datetime.now().timestamp())}"
-            request = urllib.request.Request(
-                cache_bust_url,
+            api_request = urllib.request.Request(
+                UPDATE_API_URL,
                 headers={
-                    "Cache-Control": "no-cache, no-store, max-age=0",
-                    "Pragma": "no-cache",
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
                 },
             )
-            with urllib.request.urlopen(request, timeout=10) as resp:
+            with urllib.request.urlopen(api_request, timeout=10) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
-            latest_version = str(payload.get("version", "")).strip()
-            download_url = str(payload.get("url", "")).strip()
-            sha256_hash = str(payload.get("sha256", "")).strip().lower()
-            notes = str(payload.get("notes", "")).strip()
+            tag = str(payload.get("tag_name", "")).strip()
+            version = tag.lstrip("vV")
+            body = str(payload.get("body", "")).strip()
+            download_url = ""
+            for asset in payload.get("assets", []) or []:
+                name = str(asset.get("name", ""))
+                if name.lower().endswith("-setup.exe"):
+                    download_url = str(asset.get("browser_download_url", ""))
+                    break
+            sha_match = re.search(r"SHA256[:\s]+([0-9a-fA-F]{64})", body)
+            sha256_hash = sha_match.group(1).lower() if sha_match else ""
+            notes = re.sub(r"\s*SHA256[:\s]+[0-9a-fA-F]{64}\s*", "\n", body).strip()
+            if version and download_url:
+                return {"version": version, "url": download_url, "sha256": sha256_hash, "notes": notes}
+        except Exception:
+            pass
+
+        cache_bust_url = f"{UPDATE_INFO_URL}?t={int(datetime.now().timestamp())}"
+        request = urllib.request.Request(
+            cache_bust_url,
+            headers={
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                "Pragma": "no-cache",
+                "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=10) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return {
+            "version": str(payload.get("version", "")).strip(),
+            "url": str(payload.get("url", "")).strip(),
+            "sha256": str(payload.get("sha256", "")).strip().lower(),
+            "notes": str(payload.get("notes", "")).strip(),
+        }
+
+    def check_for_updates(self, silent: bool = False) -> None:
+        try:
+            info = self._fetch_release_info()
+            latest_version = info["version"]
+            download_url = info["url"]
+            sha256_hash = info["sha256"]
+            notes = info["notes"]
 
             if not latest_version or not download_url:
                 raise RuntimeError("Update feed is missing version or url.")
