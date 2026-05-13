@@ -1,6 +1,6 @@
 {
-  "version": "0.9.47.3",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.47.3/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "9ed9f05eb59d7408b8f422330049caca64240d45a12dda1b3572eb6edfcc1fd5",
-  "notes": "Fix row editor mouse-wheel scrolling and save reliability feedback."
+  "version": "0.9.47.4",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.47.4/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "39342db5f06ba949495d9ba0c169938b553d8507eae0dd9eb0dbbc91a2549c81",
+  "notes": "Switch date format to MM-DD-YYYY across app and export naming."
 }
