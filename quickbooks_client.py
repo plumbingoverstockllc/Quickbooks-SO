@@ -203,6 +203,7 @@ class QuickBooksClient:
         qb_details = _quickbooks_process_details()
         qb_already_running = len(qb_details) > 0
         log.info("connect(): QB process detected = %s (count=%d)", qb_already_running, len(qb_details))
+        app_elevation = _current_process_elevation()
 
         # Hard safety gate: do not call BeginSession in ambiguous process states.
         # This avoids any chance of side effects when QuickBooks has multiple
@@ -227,6 +228,39 @@ class QuickBooksClient:
                 "Multiple QuickBooks processes are running. This app will not attempt to connect "
                 "until only one QuickBooks instance remains.\n\n"
                 "Close all QuickBooks windows/processes, reopen one company file once, then retry.\n\n"
+                f"Context: {context_note}"
+            )
+
+        # Additional hard gate: never attempt BeginSession from an elevated app.
+        # In this environment, that can trigger QuickBooks to spawn a secondary
+        # elevated window/session even when the main QB instance is standard.
+        if app_elevation == "elevated":
+            context_note = _runtime_context_note()
+            log.error("connect(): app is elevated; refusing BeginSession to avoid secondary QB launch")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "This app is running elevated (Run as Administrator). To prevent QuickBooks "
+                "from spawning a secondary window/session, connection is blocked in elevated mode.\n\n"
+                "Close this app and reopen it normally (non-admin), and run QuickBooks in the "
+                "same non-admin context.\n\n"
+                f"Context: {context_note}"
+            )
+
+        # Match-elevation gate: block before BeginSession if QuickBooks process
+        # elevation differs from this app.
+        mismatched = [
+            row for row in qb_details if row.get("elevation") not in ("unknown", app_elevation)
+        ]
+        if mismatched:
+            context_note = _runtime_context_note()
+            log.error("connect(): app/QB elevation mismatch detected; refusing BeginSession")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "QuickBooks and this app are running at different UAC elevation levels. "
+                "Connection is blocked before BeginSession to avoid spawning extra QuickBooks windows.\n\n"
+                "Run both QuickBooks and this app at the same level (recommended: both standard/non-admin).\n\n"
                 f"Context: {context_note}"
             )
 
