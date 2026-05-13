@@ -145,6 +145,25 @@ def _has_no_company_open_window() -> bool:
     return False
 
 
+def _has_secondary_window_title() -> bool:
+    for title in _quickbooks_window_titles():
+        if "(secondary)" in title.lower():
+            return True
+    return False
+
+
+def _is_company_session_lost_error(exc: Exception | None) -> bool:
+    if exc is None:
+        return False
+    text = str(exc).lower()
+    return (
+        "-2147220478" in text
+        or "-2147220469" in text
+        or "could not get the name of the current quickbooks company data file" in text
+        or "unexpected error. check the \"qbsdklog.txt\"" in text
+    )
+
+
 def _runtime_context_note() -> str:
     qb_details = _quickbooks_process_details()
     qb_titles = _quickbooks_window_titles()
@@ -276,26 +295,42 @@ class QuickBooksClient:
                 f"Context: {context_note}"
             )
 
-        # First: try to attach to whatever QuickBooks already has open. Passing
-        # an empty path tells QBXMLRP2 to use the current session if one exists.
-        # Keep the FIRST failure (mode 2 = DontCare) — that's the most diagnostic
-        # error to surface, since the later modes typically fail for the same
-        # reason but with less specific text.
+        if _has_secondary_window_title():
+            context_note = _runtime_context_note()
+            log.error("connect(): QuickBooks has a Secondary window title; refusing BeginSession")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "QuickBooks shows a Secondary window/session. Connection is blocked to avoid "
+                "triggering additional QuickBooks windows.\n\n"
+                "Close all QuickBooks windows/processes, then open only one company window and retry.\n\n"
+                f"Context: {context_note}"
+            )
+
+        # Single safe attach attempt only. Do not cascade retries after one SDK
+        # failure, because retries can worsen unstable QB/network state.
         attach_error = None
-        for open_mode in (2, 0, 1):  # 2=DontCare, 0=SingleUser, 1=MultiUser
-            try:
-                log.debug("connect(): BeginSession(path='', mode=%d)", open_mode)
-                self._ticket = self._rp.BeginSession("", open_mode)
-                log.info("connect(): attached to running session (mode=%d)", open_mode)
-                return
-            except Exception as exc:
-                log.warning("connect(): BeginSession(path='', mode=%d) failed — %s", open_mode, exc)
-                if attach_error is None:
-                    attach_error = exc
+        try:
+            log.debug("connect(): BeginSession(path='', mode=2)")
+            self._ticket = self._rp.BeginSession("", 2)
+            log.info("connect(): attached to running session (mode=2)")
+            return
+        except Exception as exc:
+            attach_error = exc
+            log.warning("connect(): BeginSession(path='', mode=2) failed — %s", exc)
 
         context_note = _runtime_context_note()
         log.error("connect(): context diagnostics: %s", context_note)
         self.close()
+        if _is_company_session_lost_error(attach_error):
+            raise RuntimeError(
+                "QuickBooks lost access to the company session while this connection attempt was running "
+                "(SDK errors -2147220478 / -2147220469). This usually indicates a QuickBooks host/network "
+                "company-file instability, not an app launch fallback.\n\n"
+                "In QuickBooks, resolve the connection-lost state first, reopen the company file, "
+                "then retry once stable.\n\n"
+                f"Attach details: {attach_error}\nContext: {context_note}"
+            )
         raise RuntimeError(
             "QuickBooks Desktop is running, but this app could not attach to the open "
             "company file. This app will not launch/open QuickBooks as fallback.\n\n"
