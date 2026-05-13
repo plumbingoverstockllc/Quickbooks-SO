@@ -22,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.59 Beta"
+APP_VERSION = "v0.9.60 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -403,6 +403,7 @@ class SalesOrderApp:
         self.memo_var = tk.StringVar(value=self.settings.get("memo", ""))
         self.currency_var = tk.StringVar(value=self.settings.get("currency", "USD"))
         self.tax_code_var = tk.StringVar(value=self.settings.get("tax_code", "TAX"))
+        self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.pricing_mode = self.settings.get("pricing_mode", "brand")
         self.use_actual_cost = bool(self.settings.get("use_actual_cost", False))
         self.default_pricing_value = float(self.settings.get("default_pricing_value", 0.4))
@@ -1011,6 +1012,7 @@ class SalesOrderApp:
             "memo": self.memo_var.get().strip(),
             "currency": self.currency_var.get().strip(),
             "tax_code": self.tax_code_var.get().strip(),
+            "qb_company_file_path": self.qb_company_file_var.get().strip(),
             "pricing_mode": self.pricing_mode,
             "use_actual_cost": self.use_actual_cost,
             "default_pricing_value": self.default_pricing_value,
@@ -1042,9 +1044,10 @@ class SalesOrderApp:
         self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
         self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
         self._path_row(config, "Output File", self.output_path_var, self._browse_output, 2)
+        self._path_row(config, "QB Company File (.QBW)", self.qb_company_file_var, self._browse_qb_company_file, 3)
 
         form = ttk.Frame(config, style="Card.TFrame")
-        form.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         for i in range(6):
             form.columnconfigure(i, weight=1)
 
@@ -1068,7 +1071,7 @@ class SalesOrderApp:
         self._form_entry(form, "Tax Code", self.tax_code_var, 3, 5, 1)
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
-        qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         ttk.Button(
             qb_bar,
             text="Connect to QuickBooks Desktop",
@@ -1306,6 +1309,19 @@ class SalesOrderApp:
             self._persist_settings()
             self._set_status(f"Output path updated: {Path(path).name}")
 
+    def _browse_qb_company_file(self):
+        path = filedialog.askopenfilename(
+            title="Select QuickBooks Company File",
+            filetypes=[("QuickBooks Company File", "*.QBW *.qbw"), ("All Files", "*.*")],
+        )
+        if path:
+            self.qb_company_file_var.set(path)
+            self._persist_settings()
+            self._set_status(f"QuickBooks company file set: {Path(path).name}")
+
+    def _qb_client(self) -> QuickBooksClient:
+        return QuickBooksClient(company_file_path=self.qb_company_file_var.get().strip())
+
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
 
@@ -1326,7 +1342,7 @@ class SalesOrderApp:
 
     def fetch_next_so(self):
         try:
-            next_no = QuickBooksClient().get_next_sales_order_number()
+            next_no = self._qb_client().get_next_sales_order_number()
             self.sales_order_no_var.set(next_no)
             self._set_status(f"Fetched next sales order number: {next_no}")
             self._set_qb_status("Connected", state="connected")
@@ -1341,7 +1357,7 @@ class SalesOrderApp:
 
     def connect_quickbooks(self, silent: bool = False):
         try:
-            company_name = QuickBooksClient().test_connection()
+            company_name = self._qb_client().test_connection()
             self._set_qb_status(f"Connected: {company_name}", state="connected")
             self._set_status(f"Connected to QuickBooks company: {company_name}")
             if not silent:
@@ -1657,7 +1673,7 @@ class SalesOrderApp:
             messagebox.showwarning("No data", "Build preview first.")
             return
         try:
-            result = QuickBooksClient().upload_sales_order(
+            result = self._qb_client().upload_sales_order(
                 customer_name=self.customer_var.get().strip(),
                 sales_order_no=self.sales_order_no_var.get().strip(),
                 txn_date=self._normalize_date_for_qb(self.sales_order_date_var.get().strip()),

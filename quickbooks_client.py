@@ -10,8 +10,9 @@ import win32com.client
 
 
 class QuickBooksClient:
-    def __init__(self, app_name: str = "SO Desktop App") -> None:
+    def __init__(self, app_name: str = "SO Desktop App", company_file_path: str = "") -> None:
         self.app_name = app_name
+        self.company_file_path = (company_file_path or "").strip()
         self._rp = None
         self._ticket = None
 
@@ -19,20 +20,35 @@ class QuickBooksClient:
         pythoncom.CoInitialize()
         self._rp = win32com.client.Dispatch("QBXMLRP2.RequestProcessor")
         self._rp.OpenConnection2("", self.app_name, 1)
+
+        # Try the saved company file path first (lets the app connect even when
+        # QuickBooks isn't already running, or has a different / no file open),
+        # then fall back to "" which uses whatever file QuickBooks has open.
+        path_candidates: list[str] = []
+        if self.company_file_path:
+            path_candidates.append(self.company_file_path)
+        path_candidates.append("")
+
         last_error = None
-        # Try common file open modes in order of safest compatibility.
-        for open_mode in (0, 2, 1):
-            try:
-                self._ticket = self._rp.BeginSession("", open_mode)
-                return
-            except Exception as exc:
-                last_error = exc
+        for path in path_candidates:
+            for open_mode in (2, 0, 1):  # 2=DontCare, 0=SingleUser, 1=MultiUser
+                try:
+                    self._ticket = self._rp.BeginSession(path, open_mode)
+                    return
+                except Exception as exc:
+                    last_error = exc
 
         self.close()
+        hint = ""
+        if not self.company_file_path:
+            hint = (
+                "\n\nTip: set the QuickBooks Company File (.QBW) path in the app's Configuration "
+                "card so it can open the file directly."
+            )
         raise RuntimeError(
             "Could not connect to QuickBooks Desktop. Open QuickBooks and your company file first, "
-            "then run this app with the same Windows user/session as QuickBooks. "
-            f"Details: {last_error}"
+            "then run this app with the same Windows user/session as QuickBooks."
+            f"{hint}\n\nDetails: {last_error}"
         )
 
     def close(self) -> None:

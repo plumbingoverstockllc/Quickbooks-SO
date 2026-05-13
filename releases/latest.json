@@ -1,6 +1,6 @@
 {
-  "version": "0.9.59",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.59/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "08a4d3be42b503ccc535095fc75a96a422e3686f8b73a3fa47c28fa031351e40",
-  "notes": "Installer no longer hangs on 'Closing applications...': pre-install step now force-kills any running QB Sales Order Converter.exe (including hung or crashed instances) before file copy."
+  "version": "0.9.60",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.60/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "90333b39a901f199f768a86bb644768c86f889405ead99898266c61a84d2798c",
+  "notes": "Adds a 'QB Company File (.QBW)' path setting in the Configuration card so Connect to QuickBooks Desktop can open the right company file directly, fixing the BeginSession error when QuickBooks is running without a file open."
 }
