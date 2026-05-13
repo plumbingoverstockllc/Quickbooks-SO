@@ -1,6 +1,6 @@
 {
-  "version": "0.9.700",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.700/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4df5e659c0162694d06264b349352e086bc1d7a5db5245bbe0a6cf69b52d172a",
-  "notes": "Bridge release to restore update detection from v0.9.631 and later, including the refreshed UI plus QuickBooks startup/connection fixes."
+  "version": "0.9.701",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.701/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "2aebffc2cbb071e3c4b31490f8ac7552a0f83dc89efd3cb1de41b052775e7cc5",
+  "notes": "Updates installer publisher metadata to Moshe Adelman DBA RunByItself.com and publishes v0.9.701 for auto-update delivery."
 }
