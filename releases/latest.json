@@ -1,6 +1,6 @@
 {
-  "version": "0.9.53",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.53/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "5840f4d2b680264f80f1693463fc8db0f387d7e8d6db643a932083d86346a00d",
-  "notes": "Show visible installer progress during updates to avoid crash-like handoff behavior."
+  "version": "0.9.54",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.54/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "0abb51daec1436433e74d673bd2fecca78537d42db6e4a5b62615a3809c14e43",
+  "notes": "Refreshed UI with Apple/Windows 11-style cards, modern buttons, and zero-padded MM/DD/YYYY date format."
 }

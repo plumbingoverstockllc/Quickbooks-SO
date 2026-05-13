@@ -21,10 +21,33 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.53 Beta"
+APP_VERSION = "v0.9.54 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
+
+UI = {
+    "bg_window": "#F3F3F3",
+    "bg_card": "#FFFFFF",
+    "bg_subtle": "#FAFAFB",
+    "bg_hover": "#F5F5F7",
+    "bg_pressed": "#EBEBED",
+    "border": "#E5E5EA",
+    "border_strong": "#D1D5DB",
+    "text_primary": "#1F2937",
+    "text_secondary": "#6B7280",
+    "text_tertiary": "#9CA3AF",
+    "accent": "#0078D4",
+    "accent_hover": "#106EBE",
+    "accent_pressed": "#005A9E",
+    "accent_bg": "#EDF4FB",
+    "success": "#065F46",
+    "success_bg": "#DFF6DD",
+    "warning": "#92400E",
+    "warning_bg": "#FEF3C7",
+    "danger": "#B91C1C",
+    "danger_bg": "#FEE2E2",
+}
 
 
 class PricingRulesDialog(tk.Toplevel):
@@ -41,8 +64,9 @@ class PricingRulesDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Pricing Rules")
-        self.geometry("520x580")
+        self.geometry("560x620")
         self.resizable(True, True)
+        self.configure(bg=UI["bg_window"])
         self.result = None
         self.source_df = source_df
         self.existing_brand_values = existing_brand_values or {}
@@ -53,43 +77,80 @@ class PricingRulesDialog(tk.Toplevel):
         self.use_actual_cost_var = tk.BooleanVar(value=use_actual_cost)
         self.default_var = tk.StringVar(value=str(default_value))
 
+        ttk.Label(self, text="Pricing Rules", style="Header.TLabel").pack(
+            anchor="w", padx=18, pady=(18, 2)
+        )
+        ttk.Label(
+            self,
+            text="Choose how line item rates are calculated.",
+            style="SubHeader.TLabel",
+        ).pack(anchor="w", padx=18, pady=(0, 12))
+
         mode_frame = ttk.Frame(self)
-        mode_frame.pack(fill="x", padx=12, pady=(12, 4))
-        ttk.Label(mode_frame, text="Pricing Mode:").pack(side="left")
-        ttk.Radiobutton(mode_frame, text="Per Brand", value="brand", variable=self.pricing_mode_var, command=self._render_value_rows).pack(side="left", padx=(10, 6))
-        ttk.Radiobutton(mode_frame, text="Per Item (SKU)", value="item", variable=self.pricing_mode_var, command=self._render_value_rows).pack(side="left", padx=(0, 6))
-        ttk.Radiobutton(mode_frame, text="Per Line (Excel Row)", value="line", variable=self.pricing_mode_var, command=self._render_value_rows).pack(side="left")
+        mode_frame.pack(fill="x", padx=18, pady=(0, 6))
+        ttk.Label(mode_frame, text="Pricing Mode").pack(side="left")
+        ttk.Radiobutton(
+            mode_frame,
+            text="Per Brand",
+            value="brand",
+            variable=self.pricing_mode_var,
+            command=self._render_value_rows,
+        ).pack(side="left", padx=(12, 8))
+        ttk.Radiobutton(
+            mode_frame,
+            text="Per Item (SKU)",
+            value="item",
+            variable=self.pricing_mode_var,
+            command=self._render_value_rows,
+        ).pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(
+            mode_frame,
+            text="Per Line (Excel Row)",
+            value="line",
+            variable=self.pricing_mode_var,
+            command=self._render_value_rows,
+        ).pack(side="left")
 
         ttk.Checkbutton(
             self,
             text="Use actual cost (typed value is final rate, not multiplier)",
             variable=self.use_actual_cost_var,
             command=self._update_default_label,
-        ).pack(anchor="w", padx=12, pady=(0, 8))
+        ).pack(anchor="w", padx=18, pady=(8, 10))
 
         self.default_label_var = tk.StringVar()
         self._update_default_label()
-        ttk.Label(self, textvariable=self.default_label_var).pack(anchor="w", padx=12, pady=(0, 4))
-        ttk.Entry(self, textvariable=self.default_var).pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Label(self, textvariable=self.default_label_var).pack(anchor="w", padx=18, pady=(0, 4))
+        ttk.Entry(self, textvariable=self.default_var).pack(fill="x", padx=18, pady=(0, 14))
 
-        wrapper = ttk.Frame(self)
-        wrapper.pack(fill="both", expand=True, padx=12, pady=4)
-        canvas = tk.Canvas(wrapper, highlightthickness=0)
+        wrapper = tk.Frame(
+            self,
+            bg=UI["bg_card"],
+            highlightbackground=UI["border"],
+            highlightthickness=1,
+            bd=0,
+        )
+        wrapper.pack(fill="both", expand=True, padx=18, pady=(0, 14))
+        canvas = tk.Canvas(wrapper, highlightthickness=0, bg=UI["bg_card"], bd=0)
         scroll = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
-        self.inner = ttk.Frame(canvas)
+        self.inner = ttk.Frame(canvas, style="Card.TFrame")
         self.inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self.inner, anchor="nw")
         canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
+        scroll.pack(side="right", fill="y", pady=8)
 
         self.value_vars: dict[str, tk.StringVar] = {}
         self._render_value_rows()
 
         buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=12, pady=12)
-        ttk.Button(buttons, text="Cancel", command=self._cancel).pack(side="right", padx=6)
-        ttk.Button(buttons, text="Use Pricing Rules", command=self._submit).pack(side="right")
+        buttons.pack(fill="x", padx=18, pady=(0, 16))
+        ttk.Button(buttons, text="Use Pricing Rules", command=self._submit, style="Primary.TButton").pack(
+            side="right"
+        )
+        ttk.Button(buttons, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
 
         self.transient(parent)
         self.grab_set()
@@ -118,9 +179,9 @@ class PricingRulesDialog(tk.Toplevel):
             values_source = self.existing_line_values
 
         for key, label in keys:
-            row = ttk.Frame(self.inner)
-            row.pack(fill="x", pady=2)
-            ttk.Label(row, text=label, width=34).pack(side="left")
+            row = ttk.Frame(self.inner, style="Card.TFrame")
+            row.pack(fill="x", pady=3, padx=10)
+            ttk.Label(row, text=label, width=34, style="Card.TLabel").pack(side="left")
             existing_value = ""
             if key in values_source:
                 existing_value = str(values_source.get(key, ""))
@@ -164,74 +225,94 @@ class RowEditorDialog(tk.Toplevel):
     def __init__(self, parent: tk.Tk, source_row: dict, output_row: dict, excel_line_number: int) -> None:
         super().__init__(parent)
         self.title(f"Edit Row (Excel Line {excel_line_number})")
-        self.geometry("840x600")
+        self.geometry("880x640")
         self.resizable(True, True)
+        self.configure(bg=UI["bg_window"])
         self.result = None
         self._output_canvas: tk.Canvas | None = None
         self._source_canvas: tk.Canvas | None = None
 
-        wrapper = ttk.Frame(self, padding=12)
+        header_box = ttk.Frame(self, padding=(20, 18, 20, 4))
+        header_box.pack(fill="x")
+        ttk.Label(header_box, text=f"Edit Row · Excel line {excel_line_number}", style="Header.TLabel").pack(
+            anchor="w"
+        )
+        ttk.Label(
+            header_box,
+            text=(
+                f"SO {output_row.get('Sales Order No', '') or '—'}  ·  "
+                f"Customer: {output_row.get('Customer', '') or '—'}"
+            ),
+            style="SubHeader.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
+
+        wrapper = ttk.Frame(self, padding=(20, 10, 20, 0))
         wrapper.pack(fill="both", expand=True)
 
         notebook = ttk.Notebook(wrapper)
         notebook.pack(fill="both", expand=True)
-        output_tab = ttk.Frame(notebook)
-        source_tab = ttk.Frame(notebook)
+        output_tab = ttk.Frame(notebook, style="Card.TFrame")
+        source_tab = ttk.Frame(notebook, style="Card.TFrame")
         notebook.add(output_tab, text="Output Preview")
         notebook.add(source_tab, text="Source Fields")
         notebook.select(output_tab)
 
         self.source_vars = {}
         self.output_vars = {}
-        ttk.Label(output_tab, text=f"Output values for Excel line {excel_line_number}", style="SubHeader.TLabel").pack(anchor="w", pady=(8, 8), padx=8)
-        out_canvas = tk.Canvas(output_tab, highlightthickness=0)
+
+        ttk.Label(
+            output_tab,
+            text=f"Output values for Excel line {excel_line_number}",
+            style="CardSubHeader.TLabel",
+        ).pack(anchor="w", pady=(12, 10), padx=14)
+        out_canvas = tk.Canvas(output_tab, highlightthickness=0, bg=UI["bg_card"], bd=0)
         out_scroll = ttk.Scrollbar(output_tab, orient="vertical", command=out_canvas.yview)
-        out_inner = ttk.Frame(out_canvas)
+        out_inner = ttk.Frame(out_canvas, style="Card.TFrame")
         out_inner.bind("<Configure>", lambda e: out_canvas.configure(scrollregion=out_canvas.bbox("all")))
         out_canvas.create_window((0, 0), window=out_inner, anchor="nw")
         out_canvas.configure(yscrollcommand=out_scroll.set)
-        out_canvas.pack(side="left", fill="both", expand=True)
+        out_canvas.pack(side="left", fill="both", expand=True, padx=(10, 0))
         out_scroll.pack(side="right", fill="y")
         self._output_canvas = out_canvas
 
-        header_line = ttk.Frame(out_inner)
-        header_line.pack(fill="x", pady=(0, 8))
-        ttk.Label(header_line, text=f"Line #: {excel_line_number}", width=20).pack(side="left")
-        ttk.Label(header_line, text=f"SO: {output_row.get('Sales Order No', '')}").pack(side="left")
-        ttk.Label(header_line, text=f"Customer: {output_row.get('Customer', '')}").pack(side="left", padx=(10, 0))
-
         for col, value in output_row.items():
             value = output_row.get(col, "")
-            row = ttk.Frame(out_inner)
-            row.pack(fill="x", pady=3)
-            ttk.Label(row, text=col, width=34).pack(side="left")
+            row = ttk.Frame(out_inner, style="Card.TFrame")
+            row.pack(fill="x", pady=3, padx=4)
+            ttk.Label(row, text=col, width=34, style="Card.TLabel").pack(side="left")
             var = tk.StringVar(value="" if value is None else str(value))
             self.output_vars[col] = var
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
 
-        canvas = tk.Canvas(source_tab, highlightthickness=0)
+        ttk.Label(
+            source_tab,
+            text=f"Edit source fields for Excel line {excel_line_number}",
+            style="CardSubHeader.TLabel",
+        ).pack(anchor="w", pady=(12, 10), padx=14)
+        canvas = tk.Canvas(source_tab, highlightthickness=0, bg=UI["bg_card"], bd=0)
         scrollbar = ttk.Scrollbar(source_tab, orient="vertical", command=canvas.yview)
-        inner = ttk.Frame(canvas)
+        inner = ttk.Frame(canvas, style="Card.TFrame")
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=inner, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
+        canvas.pack(side="left", fill="both", expand=True, padx=(10, 0))
         scrollbar.pack(side="right", fill="y")
         self._source_canvas = canvas
 
-        ttk.Label(inner, text=f"Edit source fields for Excel line {excel_line_number}", style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
         for col, value in source_row.items():
-            row = ttk.Frame(inner)
-            row.pack(fill="x", pady=3)
-            ttk.Label(row, text=col, width=34).pack(side="left")
+            row = ttk.Frame(inner, style="Card.TFrame")
+            row.pack(fill="x", pady=3, padx=4)
+            ttk.Label(row, text=col, width=34, style="Card.TLabel").pack(side="left")
             var = tk.StringVar(value="" if value is None else str(value))
             self.source_vars[col] = var
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
 
-        btns = ttk.Frame(self, padding=(12, 8, 12, 12))
+        btns = ttk.Frame(self, padding=(20, 12, 20, 16))
         btns.pack(fill="x")
-        ttk.Button(btns, text="Cancel", command=self._cancel).pack(side="right", padx=6)
-        ttk.Button(btns, text="Save Changes", command=self._save).pack(side="right")
+        ttk.Button(btns, text="Save Changes", command=self._save, style="Primary.TButton").pack(side="right")
+        ttk.Button(btns, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
 
         self.transient(parent)
         self.grab_set()
@@ -339,21 +420,347 @@ class SalesOrderApp:
         self.root.after(1200, self.check_for_updates_on_startup)
 
     def _configure_styles(self) -> None:
-        self.style.configure(".", font=("Segoe UI", 10))
-        self.style.configure("TLabelframe", padding=8)
-        self.style.configure("Header.TLabel", font=("Segoe UI Semibold", 18))
-        self.style.configure("SubHeader.TLabel", foreground="#4b5563")
-        self.style.configure("Primary.TButton", padding=(13, 9), font=("Segoe UI", 10, "bold"))
-        self.style.configure("Accent.TButton", padding=(13, 9))
-        self.style.configure("Quiet.TButton", padding=(10, 8))
-        self.style.configure("Status.TLabel", padding=(10, 8), foreground="#1f2937")
-        self.style.configure("QbConnected.TLabel", foreground="#065f46", font=("Segoe UI", 9, "bold"))
-        self.style.configure("QbDisconnected.TLabel", foreground="#b91c1c", font=("Segoe UI", 9, "bold"))
-        self.style.configure("QbPending.TLabel", foreground="#92400e", font=("Segoe UI", 9, "bold"))
+        c = UI
+        self.root.configure(bg=c["bg_window"])
+
+        self.style.configure(
+            ".",
+            font=("Segoe UI", 10),
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+        )
+
+        self.style.configure("TFrame", background=c["bg_window"])
+        self.style.configure("Card.TFrame", background=c["bg_card"])
+
+        self.style.configure(
+            "TLabel",
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+            font=("Segoe UI", 10),
+        )
+        self.style.configure(
+            "Card.TLabel",
+            background=c["bg_card"],
+            foreground=c["text_primary"],
+            font=("Segoe UI", 10),
+        )
+        self.style.configure(
+            "Header.TLabel",
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+            font=("Segoe UI Semibold", 22),
+        )
+        self.style.configure(
+            "SubHeader.TLabel",
+            background=c["bg_window"],
+            foreground=c["text_secondary"],
+            font=("Segoe UI", 10),
+        )
+        self.style.configure(
+            "CardSubHeader.TLabel",
+            background=c["bg_card"],
+            foreground=c["text_secondary"],
+            font=("Segoe UI", 9),
+        )
+        self.style.configure(
+            "FieldLabel.TLabel",
+            background=c["bg_card"],
+            foreground=c["text_secondary"],
+            font=("Segoe UI", 9),
+        )
+        self.style.configure(
+            "Status.TLabel",
+            background=c["bg_window"],
+            foreground=c["text_secondary"],
+            padding=(14, 9),
+            font=("Segoe UI", 9),
+        )
+        self.style.configure(
+            "QbConnected.TLabel",
+            background=c["bg_card"],
+            foreground=c["success"],
+            font=("Segoe UI Semibold", 9),
+        )
+        self.style.configure(
+            "QbDisconnected.TLabel",
+            background=c["bg_card"],
+            foreground=c["danger"],
+            font=("Segoe UI Semibold", 9),
+        )
+        self.style.configure(
+            "QbPending.TLabel",
+            background=c["bg_card"],
+            foreground=c["warning"],
+            font=("Segoe UI Semibold", 9),
+        )
+
+        self.style.configure(
+            "Card.TLabelframe",
+            background=c["bg_card"],
+            bordercolor=c["border"],
+            lightcolor=c["border"],
+            darkcolor=c["border"],
+            borderwidth=1,
+            relief="solid",
+            padding=(18, 14, 18, 16),
+        )
+        self.style.configure(
+            "Card.TLabelframe.Label",
+            background=c["bg_card"],
+            foreground=c["text_primary"],
+            font=("Segoe UI Semibold", 11),
+            padding=(6, 2),
+        )
+
+        self.style.configure(
+            "TEntry",
+            fieldbackground=c["bg_card"],
+            foreground=c["text_primary"],
+            bordercolor=c["border_strong"],
+            lightcolor=c["border_strong"],
+            darkcolor=c["border_strong"],
+            insertcolor=c["text_primary"],
+            borderwidth=1,
+            padding=(8, 6),
+            relief="flat",
+        )
+        self.style.map(
+            "TEntry",
+            bordercolor=[("focus", c["accent"])],
+            lightcolor=[("focus", c["accent"])],
+            darkcolor=[("focus", c["accent"])],
+            fieldbackground=[("disabled", c["bg_hover"])],
+            foreground=[("disabled", c["text_tertiary"])],
+        )
+
+        self.style.configure(
+            "TButton",
+            padding=(14, 8),
+            font=("Segoe UI", 10),
+            background=c["bg_card"],
+            foreground=c["text_primary"],
+            bordercolor=c["border_strong"],
+            lightcolor=c["border_strong"],
+            darkcolor=c["border_strong"],
+            borderwidth=1,
+            focusthickness=0,
+            relief="flat",
+        )
+        self.style.map(
+            "TButton",
+            background=[("active", c["bg_hover"]), ("pressed", c["bg_pressed"]), ("disabled", c["bg_hover"])],
+            foreground=[("disabled", c["text_tertiary"])],
+            bordercolor=[("active", c["border_strong"]), ("pressed", c["border_strong"])],
+        )
+
+        self.style.configure(
+            "Primary.TButton",
+            padding=(20, 9),
+            font=("Segoe UI Semibold", 10),
+            background=c["accent"],
+            foreground="#FFFFFF",
+            bordercolor=c["accent"],
+            lightcolor=c["accent"],
+            darkcolor=c["accent"],
+            borderwidth=0,
+            focusthickness=0,
+            relief="flat",
+        )
+        self.style.map(
+            "Primary.TButton",
+            background=[
+                ("active", c["accent_hover"]),
+                ("pressed", c["accent_pressed"]),
+                ("disabled", c["border_strong"]),
+            ],
+            foreground=[("disabled", c["text_tertiary"])],
+            bordercolor=[
+                ("active", c["accent_hover"]),
+                ("pressed", c["accent_pressed"]),
+            ],
+        )
+
+        self.style.configure(
+            "Accent.TButton",
+            padding=(16, 8),
+            font=("Segoe UI Semibold", 10),
+            background=c["bg_card"],
+            foreground=c["accent"],
+            bordercolor=c["accent"],
+            lightcolor=c["accent"],
+            darkcolor=c["accent"],
+            borderwidth=1,
+            focusthickness=0,
+            relief="flat",
+        )
+        self.style.map(
+            "Accent.TButton",
+            background=[
+                ("active", c["accent_bg"]),
+                ("pressed", c["accent_bg"]),
+                ("disabled", c["bg_hover"]),
+            ],
+            foreground=[
+                ("active", c["accent_pressed"]),
+                ("disabled", c["text_tertiary"]),
+            ],
+            bordercolor=[
+                ("active", c["accent_pressed"]),
+                ("disabled", c["border"]),
+            ],
+        )
+
+        self.style.configure(
+            "Quiet.TButton",
+            padding=(14, 8),
+            font=("Segoe UI", 10),
+            background=c["bg_card"],
+            foreground=c["text_secondary"],
+            bordercolor=c["border"],
+            lightcolor=c["border"],
+            darkcolor=c["border"],
+            borderwidth=1,
+            focusthickness=0,
+            relief="flat",
+        )
+        self.style.map(
+            "Quiet.TButton",
+            background=[("active", c["bg_hover"]), ("pressed", c["bg_pressed"])],
+            foreground=[("active", c["text_primary"]), ("disabled", c["text_tertiary"])],
+            bordercolor=[("active", c["border_strong"])],
+        )
+
+        self.style.configure(
+            "Treeview",
+            background=c["bg_card"],
+            fieldbackground=c["bg_card"],
+            foreground=c["text_primary"],
+            rowheight=30,
+            borderwidth=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+        )
+        self.style.configure(
+            "Treeview.Heading",
+            background=c["bg_subtle"],
+            foreground=c["text_secondary"],
+            font=("Segoe UI Semibold", 9),
+            padding=(10, 8),
+            borderwidth=0,
+            relief="flat",
+        )
+        self.style.map(
+            "Treeview.Heading",
+            background=[("active", c["bg_hover"])],
+            foreground=[("active", c["text_primary"])],
+        )
+        self.style.map(
+            "Treeview",
+            background=[("selected", c["accent_bg"])],
+            foreground=[("selected", c["text_primary"])],
+        )
+
+        self.style.configure(
+            "TNotebook",
+            background=c["bg_card"],
+            borderwidth=0,
+            tabmargins=(2, 4, 2, 0),
+        )
+        self.style.configure(
+            "TNotebook.Tab",
+            padding=(18, 9),
+            background=c["bg_subtle"],
+            foreground=c["text_secondary"],
+            borderwidth=0,
+            font=("Segoe UI", 10),
+        )
+        self.style.map(
+            "TNotebook.Tab",
+            background=[("selected", c["bg_card"]), ("active", c["bg_hover"])],
+            foreground=[("selected", c["accent"]), ("active", c["text_primary"])],
+            font=[("selected", ("Segoe UI Semibold", 10))],
+        )
+
+        for orient in ("Vertical", "Horizontal"):
+            self.style.configure(
+                f"{orient}.TScrollbar",
+                background=c["bg_card"],
+                troughcolor=c["bg_card"],
+                bordercolor=c["bg_card"],
+                arrowcolor=c["text_tertiary"],
+                gripcount=0,
+                borderwidth=0,
+                relief="flat",
+                arrowsize=14,
+            )
+            self.style.map(
+                f"{orient}.TScrollbar",
+                background=[("active", c["border_strong"]), ("pressed", c["text_tertiary"])],
+                arrowcolor=[("active", c["text_primary"])],
+            )
+
+        self.style.configure("TPanedwindow", background=c["bg_window"])
+        self.style.configure(
+            "Sash",
+            sashthickness=6,
+            gripcount=0,
+            background=c["bg_window"],
+            bordercolor=c["bg_window"],
+            lightcolor=c["bg_window"],
+            darkcolor=c["bg_window"],
+        )
+
+        self.style.configure(
+            "TProgressbar",
+            background=c["accent"],
+            troughcolor=c["bg_hover"],
+            bordercolor=c["bg_hover"],
+            lightcolor=c["accent"],
+            darkcolor=c["accent"],
+            borderwidth=0,
+            thickness=8,
+        )
+
+        self.style.configure(
+            "TRadiobutton",
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+            font=("Segoe UI", 10),
+            focuscolor=c["bg_window"],
+        )
+        self.style.map(
+            "TRadiobutton",
+            background=[("active", c["bg_window"])],
+            foreground=[("active", c["text_primary"])],
+        )
+        self.style.configure(
+            "TCheckbutton",
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+            font=("Segoe UI", 10),
+            focuscolor=c["bg_window"],
+        )
+        self.style.map(
+            "TCheckbutton",
+            background=[("active", c["bg_window"])],
+            foreground=[("active", c["text_primary"])],
+        )
 
     def _build_menu(self) -> None:
-        menu_bar = tk.Menu(self.root)
-        help_menu = tk.Menu(menu_bar, tearoff=0)
+        c = UI
+        menu_bar = tk.Menu(self.root, bg=c["bg_card"], fg=c["text_primary"], borderwidth=0)
+        help_menu = tk.Menu(
+            menu_bar,
+            tearoff=0,
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            activebackground=c["accent"],
+            activeforeground="#FFFFFF",
+            borderwidth=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+        )
         help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", f"{APP_NAME} {APP_VERSION}"))
@@ -373,32 +780,29 @@ class SalesOrderApp:
         return tuple(nums)
 
     def _today_display_date(self) -> str:
-        now = datetime.now()
-        return f"{now.month}/{now.day}/{now.year}"
+        return datetime.now().strftime("%m/%d/%Y")
 
     def _normalize_date_for_qb(self, date_text: str) -> str:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%d"):
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%d-%m-%Y", "%Y-%m-%d"):
             try:
-                dt = datetime.strptime(date_text, fmt)
-                return f"{dt.month}/{dt.day}/{dt.year}"
+                return datetime.strptime(date_text, fmt).strftime("%m/%d/%Y")
             except ValueError:
                 continue
-        raise ValueError(f"Invalid date format: {date_text}. Use M/D/YYYY.")
+        raise ValueError(f"Invalid date format: {date_text}. Use MM/DD/YYYY.")
 
     def _normalize_date_for_display(self, date_text: str) -> str:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%d"):
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%d-%m-%Y", "%Y-%m-%d"):
             try:
-                dt = datetime.strptime(date_text, fmt)
-                return f"{dt.month}/{dt.day}/{dt.year}"
+                return datetime.strptime(date_text, fmt).strftime("%m/%d/%Y")
             except ValueError:
                 continue
-        raise ValueError(f"Invalid date format: {date_text}. Use M/D/YYYY.")
+        raise ValueError(f"Invalid date format: {date_text}. Use MM/DD/YYYY.")
 
     def check_for_updates(self, silent: bool = False) -> None:
         try:
@@ -451,19 +855,25 @@ class SalesOrderApp:
         installer_path = temp_dir / filename
         progress_dialog = tk.Toplevel(self.root)
         progress_dialog.title("Installing Update")
-        progress_dialog.geometry("430x150")
+        progress_dialog.geometry("460x170")
         progress_dialog.resizable(False, False)
+        progress_dialog.configure(bg=UI["bg_window"])
         progress_dialog.transient(self.root)
         progress_dialog.grab_set()
         progress_dialog.protocol("WM_DELETE_WINDOW", lambda: None)
 
         status_var = tk.StringVar(value="Downloading update...")
         progress_var = tk.DoubleVar(value=0.0)
-        ttk.Label(progress_dialog, textvariable=status_var, wraplength=390).pack(anchor="w", padx=18, pady=(18, 8))
+        ttk.Label(progress_dialog, text="Updating app", style="Header.TLabel").pack(
+            anchor="w", padx=20, pady=(18, 2)
+        )
+        ttk.Label(progress_dialog, textvariable=status_var, wraplength=420, style="SubHeader.TLabel").pack(
+            anchor="w", padx=20, pady=(0, 10)
+        )
         progress_bar = ttk.Progressbar(progress_dialog, mode="determinate", maximum=100, variable=progress_var)
-        progress_bar.pack(fill="x", padx=18, pady=(0, 8))
-        pct_label = ttk.Label(progress_dialog, text="0%")
-        pct_label.pack(anchor="e", padx=18)
+        progress_bar.pack(fill="x", padx=20, pady=(0, 6))
+        pct_label = ttk.Label(progress_dialog, text="0%", style="SubHeader.TLabel")
+        pct_label.pack(anchor="e", padx=20)
 
         def update_ui(status: str | None = None, pct: float | None = None) -> None:
             def _apply():
@@ -549,36 +959,41 @@ class SalesOrderApp:
 
     def _build_layout(self) -> None:
         root = self.root
+        c = UI
 
-        header = ttk.Frame(root, padding=12)
+        header = ttk.Frame(root, padding=(22, 20, 22, 14))
         header.pack(fill="x")
-        ttk.Label(header, text=f"Sales Order File Converter + QuickBooks Upload ({APP_VERSION})", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(header, text="Sales Order Converter", style="Header.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="Upload source file, review mapped template rows, then export or upload directly to QuickBooks Desktop Enterprise.",
+            text=f"{APP_VERSION}  ·  Upload a source file, review mapped template rows, then export or upload directly to QuickBooks Desktop.",
             style="SubHeader.TLabel",
         ).pack(anchor="w", pady=(4, 0))
 
-        config = ttk.LabelFrame(root, text="Configuration", padding=12)
-        config.pack(fill="x", padx=12, pady=8)
+        config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
+        config.pack(fill="x", padx=22, pady=(4, 10))
 
         self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
         self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
         self._path_row(config, "Output File", self.output_path_var, self._browse_output, 2)
 
-        form = ttk.Frame(config)
-        form.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        form = ttk.Frame(config, style="Card.TFrame")
+        form.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         for i in range(6):
             form.columnconfigure(i, weight=1)
 
         self._form_entry(form, "Customer", self.customer_var, 0, 0, 2)
         self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 2, 1)
-        ttk.Button(form, text="Fetch Next from QuickBooks", command=self.fetch_next_so, style="Quiet.TButton").grid(row=1, column=3, padx=4, sticky="w")
+        ttk.Button(form, text="Fetch Next from QuickBooks", command=self.fetch_next_so, style="Quiet.TButton").grid(
+            row=1, column=3, padx=4, sticky="ew"
+        )
         self._form_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 4, 1)
         self._form_entry(form, "Due Date", self.due_date_var, 0, 5, 1)
-        ttk.Label(form, text="Date format: M/D/YYYY (example: 5/12/2026)", style="SubHeader.TLabel").grid(
-            row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 6)
-        )
+        ttk.Label(
+            form,
+            text="Date format: MM/DD/YYYY (example: 05/12/2026)",
+            style="CardSubHeader.TLabel",
+        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 6))
 
         self._form_entry(form, "Terms", self.terms_var, 2, 0, 1)
         self._form_entry(form, "Shipping Method", self.shipping_method_var, 2, 1, 1)
@@ -586,32 +1001,84 @@ class SalesOrderApp:
         self._form_entry(form, "Currency", self.currency_var, 2, 4, 1)
         self._form_entry(form, "Tax Code", self.tax_code_var, 2, 5, 1)
 
-        qb_bar = ttk.Frame(config)
-        qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-        ttk.Button(qb_bar, text="Connect to QuickBooks Desktop", command=self.connect_quickbooks, style="Accent.TButton").pack(side="left")
-        ttk.Button(qb_bar, text="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide, style="Quiet.TButton").pack(side="left", padx=8)
-        ttk.Button(qb_bar, text="Check for Updates", command=self.check_for_updates, style="Quiet.TButton").pack(side="left", padx=8)
-        self.qb_status_label = ttk.Label(qb_bar, textvariable=self.qb_status_var, style="QbDisconnected.TLabel")
-        self.qb_status_label.pack(side="left", padx=10)
+        qb_bar = ttk.Frame(config, style="Card.TFrame")
+        qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        ttk.Button(
+            qb_bar,
+            text="Connect to QuickBooks Desktop",
+            command=self.connect_quickbooks,
+            style="Accent.TButton",
+        ).pack(side="left")
+        ttk.Button(
+            qb_bar,
+            text="QuickBooks Admin Setup",
+            command=self.show_qb_admin_setup_guide,
+            style="Quiet.TButton",
+        ).pack(side="left", padx=8)
+        ttk.Button(
+            qb_bar,
+            text="Check for Updates",
+            command=self.check_for_updates,
+            style="Quiet.TButton",
+        ).pack(side="left")
+        self.qb_status_pill = tk.Frame(
+            qb_bar,
+            bg=c["bg_hover"],
+            highlightbackground=c["bg_hover"],
+            highlightthickness=0,
+            bd=0,
+        )
+        self.qb_status_pill.pack(side="left", padx=12)
+        self.qb_status_inner = tk.Label(
+            self.qb_status_pill,
+            textvariable=self.qb_status_var,
+            bg=c["bg_hover"],
+            fg=c["text_secondary"],
+            font=("Segoe UI Semibold", 9),
+            padx=12,
+            pady=4,
+        )
+        self.qb_status_inner.pack()
+        self.qb_status_label = self.qb_status_inner
 
-        actions = ttk.Frame(root, padding=(12, 0, 12, 10))
+        actions = ttk.Frame(root, padding=(22, 4, 22, 12))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
-        ttk.Button(actions, text="Change Pricing Rules", command=self.change_pricing_rules, style="Quiet.TButton").pack(side="left", padx=8)
-        ttk.Button(actions, text="Export for SaaSant", command=self.export_saasant_template, style="Accent.TButton").pack(side="left", padx=8)
-        ttk.Button(actions, text="Export Template File (Custom Path)", command=self.export_file, style="Quiet.TButton").pack(side="left", padx=8)
-        ttk.Button(actions, text="Upload to QuickBooks", command=self.upload_to_quickbooks, style="Accent.TButton").pack(side="left")
+        ttk.Button(
+            actions,
+            text="Change Pricing Rules",
+            command=self.change_pricing_rules,
+            style="Quiet.TButton",
+        ).pack(side="left", padx=8)
+        ttk.Button(
+            actions,
+            text="Export for SaaSant",
+            command=self.export_saasant_template,
+            style="Accent.TButton",
+        ).pack(side="left", padx=(8, 0))
+        ttk.Button(
+            actions,
+            text="Export Template (Custom Path)",
+            command=self.export_file,
+            style="Quiet.TButton",
+        ).pack(side="left", padx=8)
+        ttk.Button(
+            actions,
+            text="Upload to QuickBooks",
+            command=self.upload_to_quickbooks,
+            style="Accent.TButton",
+        ).pack(side="left")
 
         content = ttk.Panedwindow(root, orient="vertical")
-        content.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        content.pack(fill="both", expand=True, padx=22, pady=(0, 8))
 
-        preview_frame = ttk.LabelFrame(content, text="Preview")
+        preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
         content.add(preview_frame, weight=3)
 
         self.preview_notebook = ttk.Notebook(preview_frame)
         self.preview_notebook.pack(fill="both", expand=True)
-        output_tab = ttk.Frame(self.preview_notebook)
-        source_tab = ttk.Frame(self.preview_notebook)
+        output_tab = ttk.Frame(self.preview_notebook, style="Card.TFrame")
+        source_tab = ttk.Frame(self.preview_notebook, style="Card.TFrame")
         self.preview_notebook.add(output_tab, text="Output Preview")
         self.preview_notebook.add(source_tab, text="Source Preview")
 
@@ -639,13 +1106,15 @@ class SalesOrderApp:
             else:
                 width = 420 if "Description" in col else 165
             self.output_tree.column(col, width=width, anchor="w")
+        self.output_tree.tag_configure("odd", background=c["bg_subtle"])
+        self.output_tree.tag_configure("even", background=c["bg_card"])
 
         out_scroll_y = ttk.Scrollbar(output_tab, orient="vertical", command=self.output_tree.yview)
         out_scroll_x = ttk.Scrollbar(output_tab, orient="horizontal", command=self.output_tree.xview)
         self.output_tree.configure(yscrollcommand=out_scroll_y.set, xscrollcommand=out_scroll_x.set)
         output_tab.columnconfigure(0, weight=1)
         output_tab.rowconfigure(0, weight=1)
-        self.output_tree.grid(row=0, column=0, sticky="nsew")
+        self.output_tree.grid(row=0, column=0, sticky="nsew", padx=(2, 0), pady=(4, 0))
         out_scroll_y.grid(row=0, column=1, sticky="ns")
         out_scroll_x.grid(row=1, column=0, sticky="ew")
         self.output_tree.bind("<Double-1>", self._edit_output_row)
@@ -655,34 +1124,61 @@ class SalesOrderApp:
             self.source_tree.heading(col, text=col)
             width = 220 if col == "productName" else (80 if col == "Line #" else 120)
             self.source_tree.column(col, width=width, anchor="w")
+        self.source_tree.tag_configure("odd", background=c["bg_subtle"])
+        self.source_tree.tag_configure("even", background=c["bg_card"])
         src_scroll_y = ttk.Scrollbar(source_tab, orient="vertical", command=self.source_tree.yview)
         src_scroll_x = ttk.Scrollbar(source_tab, orient="horizontal", command=self.source_tree.xview)
         self.source_tree.configure(yscrollcommand=src_scroll_y.set, xscrollcommand=src_scroll_x.set)
         source_tab.columnconfigure(0, weight=1)
         source_tab.rowconfigure(0, weight=1)
-        self.source_tree.grid(row=0, column=0, sticky="nsew")
+        self.source_tree.grid(row=0, column=0, sticky="nsew", padx=(2, 0), pady=(4, 0))
         src_scroll_y.grid(row=0, column=1, sticky="ns")
         src_scroll_x.grid(row=1, column=0, sticky="ew")
         self.source_tree.bind("<Double-1>", self._edit_source_row)
 
-        error_frame = ttk.LabelFrame(content, text="Validation Messages")
+        error_frame = ttk.LabelFrame(content, text="  Validation Messages  ", style="Card.TLabelframe")
         content.add(error_frame, weight=1)
-        self.error_text = tk.Text(error_frame, height=8, wrap="word")
+        self.error_text = tk.Text(
+            error_frame,
+            height=8,
+            wrap="word",
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            insertbackground=c["text_primary"],
+            selectbackground=c["accent_bg"],
+            selectforeground=c["text_primary"],
+            borderwidth=0,
+            highlightthickness=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+            padx=4,
+            pady=4,
+        )
         self.error_text.pack(fill="both", expand=True)
 
-        status_bar = ttk.Frame(root)
+        status_bar = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
         status_bar.pack(fill="x", side="bottom")
+        separator = tk.Frame(status_bar, bg=c["border"], height=1)
+        separator.pack(fill="x", side="top")
         ttk.Label(status_bar, textvariable=self.status_var, style="Status.TLabel").pack(anchor="w")
 
     def _path_row(self, parent, label, var, browse_cmd, row_idx):
-        ttk.Label(parent, text=label).grid(row=row_idx, column=0, sticky="w", pady=4)
-        ttk.Entry(parent, textvariable=var).grid(row=row_idx, column=1, sticky="ew", padx=8)
-        ttk.Button(parent, text="Browse", command=browse_cmd).grid(row=row_idx, column=2, sticky="e")
+        ttk.Label(parent, text=label, style="Card.TLabel", width=18).grid(
+            row=row_idx, column=0, sticky="w", pady=(6, 6)
+        )
+        ttk.Entry(parent, textvariable=var).grid(row=row_idx, column=1, sticky="ew", padx=10, pady=(6, 6))
+        ttk.Button(parent, text="Browse", command=browse_cmd).grid(
+            row=row_idx, column=2, sticky="e", pady=(6, 6)
+        )
         parent.columnconfigure(1, weight=1)
 
     def _form_entry(self, parent, label, var, row, col, span):
-        ttk.Label(parent, text=label).grid(row=row, column=col, sticky="w", padx=4, pady=(6, 0))
-        ttk.Entry(parent, textvariable=var).grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 6))
+        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
+            row=row, column=col, sticky="w", padx=4, pady=(8, 2)
+        )
+        ttk.Entry(parent, textvariable=var).grid(
+            row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 8)
+        )
 
     def _tree_values_from_row(self, row, row_index: int | None = None) -> tuple:
         values = []
@@ -749,14 +1245,18 @@ class SalesOrderApp:
 
     def _set_qb_status(self, message: str, state: str = "disconnected") -> None:
         self.qb_status_var.set(message)
-        if self.qb_status_label is None:
-            return
-        style_name = "QbDisconnected.TLabel"
+        c = UI
         if state == "connected":
-            style_name = "QbConnected.TLabel"
+            bg, fg = c["success_bg"], c["success"]
         elif state == "pending":
-            style_name = "QbPending.TLabel"
-        self.qb_status_label.configure(style=style_name)
+            bg, fg = c["warning_bg"], c["warning"]
+        else:
+            bg, fg = c["bg_hover"], c["text_secondary"]
+        try:
+            self.qb_status_pill.configure(bg=bg, highlightbackground=bg)
+            self.qb_status_inner.configure(bg=bg, fg=fg)
+        except (AttributeError, tk.TclError):
+            pass
 
     def fetch_next_so(self):
         try:
@@ -962,13 +1462,25 @@ class SalesOrderApp:
 
         for i in self.output_tree.get_children():
             self.output_tree.delete(i)
-        for row_idx, row in self.output_df.iterrows():
-            self.output_tree.insert("", "end", iid=str(row_idx), values=self._tree_values_from_row(row, row_idx))
+        for position, (row_idx, row) in enumerate(self.output_df.iterrows()):
+            self.output_tree.insert(
+                "",
+                "end",
+                iid=str(row_idx),
+                values=self._tree_values_from_row(row, row_idx),
+                tags=("odd" if position % 2 else "even",),
+            )
 
         for i in self.source_tree.get_children():
             self.source_tree.delete(i)
-        for source_row_index in self.source_df.index.tolist():
-            self.source_tree.insert("", "end", iid=str(source_row_index), values=self._source_tree_values_from_row(source_row_index))
+        for position, source_row_index in enumerate(self.source_df.index.tolist()):
+            self.source_tree.insert(
+                "",
+                "end",
+                iid=str(source_row_index),
+                values=self._source_tree_values_from_row(source_row_index),
+                tags=("odd" if position % 2 else "even",),
+            )
 
         self.error_text.delete("1.0", tk.END)
         if errors:
@@ -1012,8 +1524,7 @@ class SalesOrderApp:
             return
 
         downloads_dir = Path.home() / "Downloads"
-        today = datetime.now()
-        date_part = f"{today.month}-{today.day}-{today.year}"
+        date_part = datetime.now().strftime("%m-%d-%Y")
         so_value = self.sales_order_no_var.get().strip() or "SO"
         safe_so_value = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
         output_path = downloads_dir / f"SalesOrder_'{safe_so_value}'_{date_part}.xlsx"
@@ -1031,24 +1542,41 @@ class SalesOrderApp:
 
         dlg = tk.Toplevel(self.root)
         dlg.title("Export Complete")
-        dlg.geometry("560x220")
+        dlg.geometry("580x240")
         dlg.resizable(False, False)
+        dlg.configure(bg=UI["bg_window"])
         dlg.transient(self.root)
         dlg.grab_set()
 
-        frame = ttk.Frame(dlg, padding=14)
+        frame = ttk.Frame(dlg, padding=(22, 20, 22, 18))
         frame.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text=msg, font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        ttk.Label(frame, text=str(output_path), wraplength=520).pack(anchor="w", pady=(8, 10))
+        ttk.Label(frame, text=msg, style="Header.TLabel").pack(anchor="w")
+        ttk.Label(frame, text=str(output_path), wraplength=520, style="SubHeader.TLabel").pack(
+            anchor="w", pady=(6, 10)
+        )
         if saasant_ready:
-            ttk.Label(frame, text="Upload this file directly in SaaSant.").pack(anchor="w", pady=(0, 8))
+            ttk.Label(
+                frame,
+                text="Upload this file directly in SaaSant.",
+                style="SubHeader.TLabel",
+            ).pack(anchor="w", pady=(0, 8))
 
         btns = ttk.Frame(frame)
-        btns.pack(fill="x", pady=(6, 0))
-        ttk.Button(btns, text="Open File", command=lambda: self._open_file(output_path)).pack(side="left")
-        ttk.Button(btns, text="Go to File (Explorer)", command=lambda: self._reveal_file(output_path)).pack(side="left", padx=8)
-        ttk.Button(btns, text="Close", command=dlg.destroy).pack(side="right")
+        btns.pack(fill="x", pady=(10, 0))
+        ttk.Button(
+            btns,
+            text="Open File",
+            command=lambda: self._open_file(output_path),
+            style="Accent.TButton",
+        ).pack(side="left")
+        ttk.Button(
+            btns,
+            text="Show in Explorer",
+            command=lambda: self._reveal_file(output_path),
+            style="Quiet.TButton",
+        ).pack(side="left", padx=8)
+        ttk.Button(btns, text="Close", command=dlg.destroy, style="Quiet.TButton").pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
 
