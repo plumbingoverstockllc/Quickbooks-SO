@@ -330,9 +330,12 @@ class SalesOrderApp:
         self.line_values: dict[str, float] = self.settings.get("line_values", {})
         self.status_var = tk.StringVar(value="Ready. Load source file, then build preview.")
         self.qb_status_var = tk.StringVar(value="Not Connected")
+        self.qb_status_label: ttk.Label | None = None
 
         self._build_layout()
         self._build_menu()
+        self._set_qb_status("Not Connected", state="disconnected")
+        self.root.after(900, self._connect_quickbooks_on_startup)
         self.root.after(1200, self.check_for_updates_on_startup)
 
     def _configure_styles(self) -> None:
@@ -344,7 +347,9 @@ class SalesOrderApp:
         self.style.configure("Accent.TButton", padding=(13, 9))
         self.style.configure("Quiet.TButton", padding=(10, 8))
         self.style.configure("Status.TLabel", padding=(10, 8), foreground="#1f2937")
-        self.style.configure("QbStatus.TLabel", foreground="#065f46", font=("Segoe UI", 9, "bold"))
+        self.style.configure("QbConnected.TLabel", foreground="#065f46", font=("Segoe UI", 9, "bold"))
+        self.style.configure("QbDisconnected.TLabel", foreground="#b91c1c", font=("Segoe UI", 9, "bold"))
+        self.style.configure("QbPending.TLabel", foreground="#92400e", font=("Segoe UI", 9, "bold"))
 
     def _build_menu(self) -> None:
         menu_bar = tk.Menu(self.root)
@@ -580,7 +585,8 @@ class SalesOrderApp:
         ttk.Button(qb_bar, text="Connect to QuickBooks Desktop", command=self.connect_quickbooks, style="Accent.TButton").pack(side="left")
         ttk.Button(qb_bar, text="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide, style="Quiet.TButton").pack(side="left", padx=8)
         ttk.Button(qb_bar, text="Check for Updates", command=self.check_for_updates, style="Quiet.TButton").pack(side="left", padx=8)
-        ttk.Label(qb_bar, textvariable=self.qb_status_var, style="QbStatus.TLabel").pack(side="left", padx=10)
+        self.qb_status_label = ttk.Label(qb_bar, textvariable=self.qb_status_var, style="QbDisconnected.TLabel")
+        self.qb_status_label.pack(side="left", padx=10)
 
         actions = ttk.Frame(root, padding=(12, 0, 12, 10))
         actions.pack(fill="x")
@@ -735,26 +741,45 @@ class SalesOrderApp:
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
 
+    def _set_qb_status(self, message: str, state: str = "disconnected") -> None:
+        self.qb_status_var.set(message)
+        if self.qb_status_label is None:
+            return
+        style_name = "QbDisconnected.TLabel"
+        if state == "connected":
+            style_name = "QbConnected.TLabel"
+        elif state == "pending":
+            style_name = "QbPending.TLabel"
+        self.qb_status_label.configure(style=style_name)
+
     def fetch_next_so(self):
         try:
             next_no = QuickBooksClient().get_next_sales_order_number()
             self.sales_order_no_var.set(next_no)
             self._set_status(f"Fetched next sales order number: {next_no}")
-            self.qb_status_var.set("Connected")
+            self._set_qb_status("Connected", state="connected")
             messagebox.showinfo("Success", f"Next Sales Order number: {next_no}")
         except Exception as exc:
-            self.qb_status_var.set("Connection Failed")
+            self._set_qb_status("Connection Failed", state="disconnected")
             messagebox.showerror("QuickBooks Error", str(exc))
 
-    def connect_quickbooks(self):
+    def _connect_quickbooks_on_startup(self):
+        self._set_qb_status("Connecting...", state="pending")
+        self.connect_quickbooks(silent=True)
+
+    def connect_quickbooks(self, silent: bool = False):
         try:
             company_name = QuickBooksClient().test_connection()
-            self.qb_status_var.set(f"Connected: {company_name}")
+            self._set_qb_status(f"Connected: {company_name}", state="connected")
             self._set_status(f"Connected to QuickBooks company: {company_name}")
-            messagebox.showinfo("QuickBooks Connected", f"Connected successfully.\nCompany: {company_name}")
+            if not silent:
+                messagebox.showinfo("QuickBooks Connected", f"Connected successfully.\nCompany: {company_name}")
         except Exception as exc:
-            self.qb_status_var.set("Connection Failed")
+            self._set_qb_status("Not Connected", state="disconnected")
             error_text = str(exc)
+            if silent:
+                self._set_status("QuickBooks auto-connect failed. You can click Connect to QuickBooks Desktop.")
+                return
             if self._is_qb_admin_authorization_error(error_text):
                 self._set_status("QuickBooks admin authorization required for this company file.")
                 messagebox.showwarning(
@@ -1042,11 +1067,11 @@ class SalesOrderApp:
                 lines=self.output_df.to_dict(orient="records"),
                 tax_code=self.tax_code_var.get().strip() or "TAX",
             )
-            self.qb_status_var.set("Connected")
+            self._set_qb_status("Connected", state="connected")
             self._set_status("Sales order uploaded to QuickBooks successfully.")
             messagebox.showinfo("QuickBooks Upload", result)
         except Exception as exc:
-            self.qb_status_var.set("Connection Failed")
+            self._set_qb_status("Connection Failed", state="disconnected")
             messagebox.showerror("QuickBooks Upload Error", str(exc))
 
 
