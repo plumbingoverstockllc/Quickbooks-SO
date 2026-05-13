@@ -1,6 +1,6 @@
 {
-  "version": "0.9.702",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.702/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "8d8e95391735f2fc2e3098d1d6c43aa223571e9d27be7245b21bf5b06329b6c0",
-  "notes": "Enforces strict attach-only QuickBooks behavior (no open/launch fallback) and adds elevation/process diagnostics to pinpoint UAC or multi-instance context mismatches."
+  "version": "0.9.703",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.703/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "d8436b95ad8fafcf8d7ce3d24833adf08cb2f392752bb75f94e8bd5ef4d9bb59",
+  "notes": "Adds a hard single-process QuickBooks gate before attach, preventing any connect attempts in multi-instance states while keeping strict no-launch behavior."
 }
