@@ -1,5 +1,5 @@
 #define MyAppName "QB Sales Order Converter"
-#define MyAppVersion "0.9.58-beta"
+#define MyAppVersion "0.9.59-beta"
 #define MyAppPublisher "Eliezer Labkowski"
 #define MyAppExeName "QB Sales Order Converter.exe"
 
@@ -18,6 +18,9 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+CloseApplications=force
+CloseApplicationsFilter=*.exe
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,3 +38,19 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Kill any running instance (including a hung or crashed one) before copying
+    files. /F forces termination; /T also kills child processes that PyInstaller
+    spawned from the temp _MEIxxxx folder. Failures are ignored — there's
+    nothing to kill in a fresh install. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'),
+       '/F /IM "{#MyAppExeName}" /T',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(600);
+  Result := '';
+end;
