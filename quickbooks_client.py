@@ -21,13 +21,13 @@ class QuickBooksClient:
         self._rp = win32com.client.Dispatch("QBXMLRP2.RequestProcessor")
         self._rp.OpenConnection2("", self.app_name, 1)
 
-        # Try the saved company file path first (lets the app connect even when
-        # QuickBooks isn't already running, or has a different / no file open),
-        # then fall back to "" which uses whatever file QuickBooks has open.
-        path_candidates: list[str] = []
+        # Order matters: attach to whatever QuickBooks already has open first.
+        # If we pass a path while QB has a different file open, QBXMLRP2 will
+        # try to launch a second QB / open the file, which is what we want to
+        # avoid. Only fall back to the saved path when no live session exists.
+        path_candidates: list[str] = [""]
         if self.company_file_path:
             path_candidates.append(self.company_file_path)
-        path_candidates.append("")
 
         last_error = None
         for path in path_candidates:
@@ -43,7 +43,7 @@ class QuickBooksClient:
         if not self.company_file_path:
             hint = (
                 "\n\nTip: set the QuickBooks Company File (.QBW) path in the app's Configuration "
-                "card so it can open the file directly."
+                "card so it can open the file directly when QuickBooks isn't running."
             )
         raise RuntimeError(
             "Could not connect to QuickBooks Desktop. Open QuickBooks and your company file first, "

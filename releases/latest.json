@@ -1,6 +1,6 @@
 {
-  "version": "0.9.60",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.60/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "90333b39a901f199f768a86bb644768c86f889405ead99898266c61a84d2798c",
-  "notes": "Adds a 'QB Company File (.QBW)' path setting in the Configuration card so Connect to QuickBooks Desktop can open the right company file directly, fixing the BeginSession error when QuickBooks is running without a file open."
+  "version": "0.9.61",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.61/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "2ee7b946c65c6cb0058d088e1224e7095238b3d037fe4984d3ed96ece196c342",
+  "notes": "Connect to QuickBooks Desktop now attaches to the already-running QuickBooks session first, and only falls back to the saved .QBW path when no session is available — no more launching a second QuickBooks instance."
 }
