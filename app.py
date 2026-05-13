@@ -22,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.47.4 Beta"
+APP_VERSION = "v0.9.50 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -392,7 +392,15 @@ class SalesOrderApp:
 
     def check_for_updates(self, silent: bool = False) -> None:
         try:
-            with urllib.request.urlopen(UPDATE_INFO_URL, timeout=10) as resp:
+            cache_bust_url = f"{UPDATE_INFO_URL}?t={int(datetime.now().timestamp())}"
+            request = urllib.request.Request(
+                cache_bust_url,
+                headers={
+                    "Cache-Control": "no-cache, no-store, max-age=0",
+                    "Pragma": "no-cache",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=10) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             latest_version = str(payload.get("version", "")).strip()
             download_url = str(payload.get("url", "")).strip()
