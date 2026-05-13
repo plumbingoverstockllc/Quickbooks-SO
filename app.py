@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import hashlib
-import sys
 import threading
 import subprocess
 import tempfile
@@ -22,7 +21,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.50 Beta"
+APP_VERSION = "v0.9.51 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -473,16 +472,6 @@ class SalesOrderApp:
                 self._set_status("Update failed. Please try again.")
             self.root.after(0, _apply)
 
-        def restart_ui() -> None:
-            def _apply():
-                if progress_dialog.winfo_exists():
-                    progress_dialog.destroy()
-                self._set_status("Update complete. Reopening app...")
-                restart_cmd = self._build_restart_command()
-                subprocess.Popen(restart_cmd)
-                self.root.destroy()
-            self.root.after(0, _apply)
-
         def worker() -> None:
             try:
                 update_ui("Downloading update...", 2)
@@ -505,25 +494,15 @@ class SalesOrderApp:
                     if digest != expected_sha256:
                         raise RuntimeError("Downloaded update failed checksum validation.")
 
-                update_ui("Installing update...", 92)
-                installer = subprocess.Popen(
+                update_ui("Installing update (app will reopen automatically)...", 100)
+                subprocess.Popen(
                     [str(installer_path), "/VERYSILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS"]
                 )
-                exit_code = installer.wait()
-                if exit_code != 0:
-                    raise RuntimeError(f"Installer exited with code {exit_code}.")
-
-                update_ui("Update complete. Reopening...", 100)
-                restart_ui()
+                self.root.after(500, self.root.destroy)
             except Exception as exc:
                 fail_ui(str(exc))
 
         threading.Thread(target=worker, daemon=True).start()
-
-    def _build_restart_command(self) -> list[str]:
-        if getattr(sys, "frozen", False):
-            return [sys.executable]
-        return [sys.executable, str(Path(__file__).resolve())]
 
     def _load_settings(self) -> dict:
         if not SETTINGS_PATH.exists():

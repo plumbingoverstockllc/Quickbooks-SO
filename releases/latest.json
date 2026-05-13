@@ -1,6 +1,6 @@
 {
-  "version": "0.9.50",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.50/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "be52d6e943d7197b9603220159e2c6258a8d13d7661d487ff2227b28e957c234",
-  "notes": "Fix manual update checks by bypassing cached update feed responses."
+  "version": "0.9.51",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.51/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "de062cfcb57e1284997b20d86cf6625b256f01f6a9961a15960b08ebe2b903e4",
+  "notes": "Ensure app auto-reopens after silent update install; keep uncached update checks."
 }
