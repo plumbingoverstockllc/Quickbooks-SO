@@ -21,7 +21,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.52 Beta"
+APP_VERSION = "v0.9.53 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -309,12 +309,12 @@ class SalesOrderApp:
         self.sales_order_no_var = tk.StringVar(value=self.settings.get("sales_order_no", ""))
         self.sales_order_date_var = tk.StringVar(
             value=self._normalize_date_for_display(
-                self.settings.get("sales_order_date", datetime.now().strftime("%d-%m-%Y"))
+                self.settings.get("sales_order_date", self._today_display_date())
             )
         )
         self.due_date_var = tk.StringVar(
             value=self._normalize_date_for_display(
-                self.settings.get("due_date", datetime.now().strftime("%d-%m-%Y"))
+                self.settings.get("due_date", self._today_display_date())
             )
         )
         self.terms_var = tk.StringVar(value=self.settings.get("terms", "Prepaid"))
@@ -372,27 +372,33 @@ class SalesOrderApp:
             nums.append(0)
         return tuple(nums)
 
+    def _today_display_date(self) -> str:
+        now = datetime.now()
+        return f"{now.month}/{now.day}/{now.year}"
+
     def _normalize_date_for_qb(self, date_text: str) -> str:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m-%d-%Y"):
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%d"):
             try:
-                return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
+                dt = datetime.strptime(date_text, fmt)
+                return f"{dt.month}/{dt.day}/{dt.year}"
             except ValueError:
                 continue
-        raise ValueError(f"Invalid date format: {date_text}. Use DD-MM-YYYY.")
+        raise ValueError(f"Invalid date format: {date_text}. Use M/D/YYYY.")
 
     def _normalize_date_for_display(self, date_text: str) -> str:
         date_text = (date_text or "").strip()
         if not date_text:
             return ""
-        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%m-%d-%Y"):
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%d"):
             try:
-                return datetime.strptime(date_text, fmt).strftime("%d-%m-%Y")
+                dt = datetime.strptime(date_text, fmt)
+                return f"{dt.month}/{dt.day}/{dt.year}"
             except ValueError:
                 continue
-        raise ValueError(f"Invalid date format: {date_text}. Use DD-MM-YYYY.")
+        raise ValueError(f"Invalid date format: {date_text}. Use M/D/YYYY.")
 
     def check_for_updates(self, silent: bool = False) -> None:
         try:
@@ -499,9 +505,9 @@ class SalesOrderApp:
                     if digest != expected_sha256:
                         raise RuntimeError("Downloaded update failed checksum validation.")
 
-                update_ui("Installing update (app will reopen automatically)...", 100)
+                update_ui("Installing update... installer progress will stay visible.", 100)
                 subprocess.Popen(
-                    [str(installer_path), "/VERYSILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS"]
+                    [str(installer_path), "/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS"]
                 )
                 self.root.after(500, self.root.destroy)
             except Exception as exc:
@@ -570,7 +576,7 @@ class SalesOrderApp:
         ttk.Button(form, text="Fetch Next from QuickBooks", command=self.fetch_next_so, style="Quiet.TButton").grid(row=1, column=3, padx=4, sticky="w")
         self._form_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 4, 1)
         self._form_entry(form, "Due Date", self.due_date_var, 0, 5, 1)
-        ttk.Label(form, text="Date format: DD-MM-YYYY (day-month-year)", style="SubHeader.TLabel").grid(
+        ttk.Label(form, text="Date format: M/D/YYYY (example: 5/12/2026)", style="SubHeader.TLabel").grid(
             row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 6)
         )
 
@@ -1006,7 +1012,8 @@ class SalesOrderApp:
             return
 
         downloads_dir = Path.home() / "Downloads"
-        date_part = datetime.now().strftime("%d-%m-%Y")
+        today = datetime.now()
+        date_part = f"{today.month}-{today.day}-{today.year}"
         so_value = self.sales_order_no_var.get().strip() or "SO"
         safe_so_value = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
         output_path = downloads_dir / f"SalesOrder_'{safe_so_value}'_{date_part}.xlsx"
