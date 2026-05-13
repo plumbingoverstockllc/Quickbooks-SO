@@ -162,8 +162,35 @@ class QuickBooksClient:
             self.close()
             raise RuntimeError(f"QuickBooks OpenConnection2 failed: {exc}")
 
-        qb_already_running = _is_quickbooks_running()
-        log.info("connect(): QB process detected = %s", qb_already_running)
+        qb_details = _quickbooks_process_details()
+        qb_already_running = len(qb_details) > 0
+        log.info("connect(): QB process detected = %s (count=%d)", qb_already_running, len(qb_details))
+
+        # Hard safety gate: do not call BeginSession in ambiguous process states.
+        # This avoids any chance of side effects when QuickBooks has multiple
+        # running processes/windows with mixed contexts.
+        if not qb_already_running:
+            context_note = _runtime_context_note()
+            log.error("connect(): QuickBooks is not running; attach-only mode, no launch fallback")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "QuickBooks Desktop is not running. This app is configured to attach only and "
+                "will never launch/open QuickBooks automatically.\n\n"
+                f"Context: {context_note}"
+            )
+
+        if len(qb_details) > 1:
+            context_note = _runtime_context_note()
+            log.error("connect(): multiple QuickBooks processes detected; refusing attach")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "Multiple QuickBooks processes are running. This app will not attempt to connect "
+                "until only one QuickBooks instance remains.\n\n"
+                "Close all QuickBooks windows/processes, reopen one company file once, then retry.\n\n"
+                f"Context: {context_note}"
+            )
 
         # First: try to attach to whatever QuickBooks already has open. Passing
         # an empty path tells QBXMLRP2 to use the current session if one exists.
@@ -182,32 +209,15 @@ class QuickBooksClient:
                 if attach_error is None:
                     attach_error = exc
 
-        if qb_already_running:
-            log.error("connect(): QB is running but attach failed; path-based launch fallback is disabled")
-            context_note = _runtime_context_note()
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "QuickBooks Desktop is running, but this app could not attach to the open "
-                "company file. Common causes: the app has not been granted access to this "
-                "specific company file by a QuickBooks Admin, QuickBooks is at the "
-                "\"No Company Open\" / login screen, or this app is running in a different "
-                "Windows/UAC context than QuickBooks."
-                f"\n\nAttach details: {attach_error}"
-                f"\nContext: {context_note}"
-            )
-
-        # Never launch/open QuickBooks as a fallback from this app.
-        log.error("connect(): QB not running or not attachable; launch fallback disabled")
         context_note = _runtime_context_note()
         log.error("connect(): context diagnostics: %s", context_note)
         self.close()
         raise RuntimeError(
-            "Could not connect to QuickBooks Desktop. This app is configured to attach only "
-            "to an already-open QuickBooks company session and will not launch/open QuickBooks "
-            "as a fallback.\n\nOpen QuickBooks manually, open/login to the target company file, "
-            "and ensure this app runs under the same Windows user and UAC elevation level.\n\n"
-            f"Details: {attach_error}"
+            "QuickBooks Desktop is running, but this app could not attach to the open "
+            "company file. This app will not launch/open QuickBooks as fallback.\n\n"
+            "Ensure QuickBooks is fully logged into the company file and running under the "
+            "same Windows user and UAC elevation level as this app.\n\n"
+            f"Attach details: {attach_error}"
             f"\nContext: {context_note}"
         )
 
