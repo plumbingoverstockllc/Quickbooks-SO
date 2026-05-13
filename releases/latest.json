@@ -1,6 +1,6 @@
 {
-  "version": "0.9.7",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.7/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "bae569dba1aa31aa9025a6ccc88e891a2ef54836817ede7ce595570add007757",
-  "notes": "Introduces an Airbnb-inspired UI refresh and improves QuickBooks connection behavior by disabling forced startup auto-connect and adding a safe fallback for the No Company Open state."
+  "version": "0.9.700",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.700/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "4df5e659c0162694d06264b349352e086bc1d7a5db5245bbe0a6cf69b52d172a",
+  "notes": "Bridge release to restore update detection from v0.9.631 and later, including the refreshed UI plus QuickBooks startup/connection fixes."
 }
