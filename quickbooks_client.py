@@ -110,8 +110,44 @@ def _quickbooks_process_details() -> list[dict]:
     return details
 
 
+def _quickbooks_window_titles() -> list[str]:
+    titles: list[str] = []
+    try:
+        result = subprocess.run(
+            ["tasklist", "/V", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        for raw_line in (result.stdout or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            parts = [p.strip().strip('"') for p in line.split('","')]
+            if len(parts) < 9:
+                continue
+            exe_name = parts[0].lower().strip('"')
+            if exe_name not in _QB_PROCESS_NAMES:
+                continue
+            window_title = parts[-1].strip()
+            if window_title and window_title.upper() != "N/A":
+                titles.append(window_title)
+    except Exception:
+        return []
+    return titles
+
+
+def _has_no_company_open_window() -> bool:
+    for title in _quickbooks_window_titles():
+        if "no company open" in title.lower():
+            return True
+    return False
+
+
 def _runtime_context_note() -> str:
     qb_details = _quickbooks_process_details()
+    qb_titles = _quickbooks_window_titles()
     qb_summary = (
         ", ".join(
             f"{row['name']} pid={row['pid']} elevation={row['elevation']}"
@@ -120,9 +156,11 @@ def _runtime_context_note() -> str:
         if qb_details
         else "none detected"
     )
+    title_summary = ", ".join(qb_titles) if qb_titles else "none"
     return (
         f"App PID={os.getpid()} elevation={_current_process_elevation()}; "
-        f"QuickBooks processes={len(qb_details)} [{qb_summary}]"
+        f"QuickBooks processes={len(qb_details)} [{qb_summary}]; "
+        f"QB window titles=[{title_summary}]"
     )
 
 
@@ -189,6 +227,18 @@ class QuickBooksClient:
                 "Multiple QuickBooks processes are running. This app will not attempt to connect "
                 "until only one QuickBooks instance remains.\n\n"
                 "Close all QuickBooks windows/processes, reopen one company file once, then retry.\n\n"
+                f"Context: {context_note}"
+            )
+
+        if _has_no_company_open_window():
+            context_note = _runtime_context_note()
+            log.error("connect(): QuickBooks is at 'No Company Open'; refusing BeginSession")
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "QuickBooks is currently at 'No Company Open'. This app will not attempt "
+                "BeginSession in this state to avoid opening/spawning additional QuickBooks "
+                "windows.\n\nOpen the target company file in QuickBooks first, then retry.\n\n"
                 f"Context: {context_note}"
             )
 
