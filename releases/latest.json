@@ -1,6 +1,6 @@
 {
-  "version": "0.9.701",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.701/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "2aebffc2cbb071e3c4b31490f8ac7552a0f83dc89efd3cb1de41b052775e7cc5",
-  "notes": "Updates installer publisher metadata to Moshe Adelman DBA RunByItself.com and publishes v0.9.701 for auto-update delivery."
+  "version": "0.9.702",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.702/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "8d8e95391735f2fc2e3098d1d6c43aa223571e9d27be7245b21bf5b06329b6c0",
+  "notes": "Enforces strict attach-only QuickBooks behavior (no open/launch fallback) and adds elevation/process diagnostics to pinpoint UAC or multi-instance context mismatches."
 }
