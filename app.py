@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import logging.handlers
 import os
 import re
 import hashlib
 import threading
 import subprocess
 import tempfile
+import traceback
 import urllib.parse
 import tkinter as tk
 import urllib.request
@@ -22,11 +25,37 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.61 Beta"
+APP_VERSION = "v0.9.62 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
+LOG_PATH = SETTINGS_DIR / "app.log"
+
+
+def _setup_logging() -> logging.Logger:
+    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("qb_so_app")
+    logger.setLevel(logging.DEBUG)
+    if not logger.handlers:
+        fmt = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
+        handler = logging.handlers.RotatingFileHandler(
+            LOG_PATH, maxBytes=512_000, backupCount=2, encoding="utf-8"
+        )
+        handler.setFormatter(fmt)
+        logger.addHandler(handler)
+    logger.propagate = False
+    return logger
+
+
+log = _setup_logging()
+log.info("=" * 60)
+log.info("App starting: %s %s (PID %s)", APP_NAME, APP_VERSION, os.getpid())
+log.info("Settings dir: %s", SETTINGS_DIR)
+log.info("Log file: %s", LOG_PATH)
 
 UI = {
     "bg_window": "#E8EEF6",
@@ -792,7 +821,58 @@ class SalesOrderApp:
         help_menu.add_separator()
         help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", f"{APP_NAME} {APP_VERSION}"))
         menu_bar.add_cascade(label="Help", menu=help_menu)
+
+        log_menu = tk.Menu(
+            menu_bar,
+            tearoff=0,
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            activebackground=c["accent"],
+            activeforeground="#FFFFFF",
+            borderwidth=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+        )
+        log_menu.add_command(label="Open Log File", command=self.open_log_file)
+        log_menu.add_command(label="Show Log Folder", command=self.reveal_log_folder)
+        log_menu.add_separator()
+        log_menu.add_command(label="Clear Log", command=self.clear_log_file)
+        menu_bar.add_cascade(label="Log", menu=log_menu)
+
         self.root.config(menu=menu_bar)
+
+    def open_log_file(self) -> None:
+        log.info("User opened log file via menu")
+        try:
+            LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LOG_PATH.touch(exist_ok=True)
+            os.startfile(str(LOG_PATH))
+        except Exception as exc:
+            log.exception("Failed to open log file")
+            messagebox.showerror(
+                "Log",
+                f"Could not open the log file at:\n{LOG_PATH}\n\n{exc}",
+            )
+
+    def reveal_log_folder(self) -> None:
+        log.info("User opened log folder via menu")
+        try:
+            LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.Popen(["explorer", str(LOG_PATH.parent)])
+        except Exception as exc:
+            log.exception("Failed to open log folder")
+            messagebox.showerror("Log", f"Could not open folder:\n{LOG_PATH.parent}\n\n{exc}")
+
+    def clear_log_file(self) -> None:
+        if not messagebox.askyesno("Clear Log", "Erase the log file? This cannot be undone."):
+            return
+        try:
+            LOG_PATH.write_text("", encoding="utf-8")
+            log.info("Log file cleared by user")
+            messagebox.showinfo("Log", "Log file cleared.")
+        except Exception as exc:
+            log.exception("Failed to clear log file")
+            messagebox.showerror("Log", f"Could not clear log:\n{exc}")
 
     def _version_tuple(self, version_str: str) -> tuple[int, int, int]:
         cleaned = version_str.lower().replace("v", "").replace("beta", "").strip()
@@ -1341,23 +1421,34 @@ class SalesOrderApp:
             pass
 
     def fetch_next_so(self):
+        log.info("Fetch Next SO: clicked. company_file_path=%r", self.qb_company_file_var.get().strip())
         try:
             next_no = self._qb_client().get_next_sales_order_number()
+            log.info("Fetch Next SO: success, next=%s", next_no)
             self.sales_order_no_var.set(next_no)
             self._set_status(f"Fetched next sales order number: {next_no}")
             self._set_qb_status("Connected", state="connected")
             messagebox.showinfo("Success", f"Next Sales Order number: {next_no}")
         except Exception as exc:
+            log.error("Fetch Next SO: failed — %s", exc)
+            log.debug("Fetch Next SO traceback:\n%s", traceback.format_exc())
             self._set_qb_status("Connection Failed", state="disconnected")
             messagebox.showerror("QuickBooks Error", str(exc))
 
     def _connect_quickbooks_on_startup(self):
+        log.info("Auto-connect on startup")
         self._set_qb_status("Connecting...", state="pending")
         self.connect_quickbooks(silent=True)
 
     def connect_quickbooks(self, silent: bool = False):
+        log.info(
+            "Connect QuickBooks: clicked (silent=%s). company_file_path=%r",
+            silent,
+            self.qb_company_file_var.get().strip(),
+        )
         try:
             company_name = self._qb_client().test_connection()
+            log.info("Connect QuickBooks: success, company=%r", company_name)
             self._set_qb_status(f"Connected: {company_name}", state="connected")
             self._set_status(f"Connected to QuickBooks company: {company_name}")
             if not silent:
@@ -1365,10 +1456,13 @@ class SalesOrderApp:
         except Exception as exc:
             self._set_qb_status("Not Connected", state="disconnected")
             error_text = str(exc)
+            log.error("Connect QuickBooks: failed — %s", error_text)
+            log.debug("Connect QuickBooks traceback:\n%s", traceback.format_exc())
             if silent:
                 self._set_status("QuickBooks auto-connect failed. You can click Connect to QuickBooks Desktop.")
                 return
             if self._is_qb_admin_authorization_error(error_text):
+                log.info("Connect QuickBooks: classified as admin authorization required")
                 self._set_status("QuickBooks admin authorization required for this company file.")
                 messagebox.showwarning(
                     "QuickBooks Admin Authorization Required",
@@ -1384,7 +1478,8 @@ class SalesOrderApp:
                 "1) Open QuickBooks Desktop manually\n"
                 "2) Open the target company file\n"
                 "3) Keep QuickBooks on the same Windows user session\n"
-                "4) Re-click Connect to QuickBooks Desktop",
+                "4) Re-click Connect to QuickBooks Desktop\n\n"
+                f"See the Log menu for details (file: {LOG_PATH}).",
             )
 
     def _is_qb_admin_authorization_error(self, error_text: str) -> bool:
@@ -1670,8 +1765,15 @@ class SalesOrderApp:
 
     def upload_to_quickbooks(self):
         if self.output_df is None or self.output_df.empty:
+            log.warning("Upload to QuickBooks: aborted — no preview data")
             messagebox.showwarning("No data", "Build preview first.")
             return
+        log.info(
+            "Upload to QuickBooks: starting — customer=%r so=%r lines=%d",
+            self.customer_var.get().strip(),
+            self.sales_order_no_var.get().strip(),
+            len(self.output_df),
+        )
         try:
             result = self._qb_client().upload_sales_order(
                 customer_name=self.customer_var.get().strip(),
@@ -1684,12 +1786,18 @@ class SalesOrderApp:
                 lines=self.output_df.to_dict(orient="records"),
                 tax_code=self.tax_code_var.get().strip() or "TAX",
             )
+            log.info("Upload to QuickBooks: success — %s", result)
             self._set_qb_status("Connected", state="connected")
             self._set_status("Sales order uploaded to QuickBooks successfully.")
             messagebox.showinfo("QuickBooks Upload", result)
         except Exception as exc:
+            log.error("Upload to QuickBooks: failed — %s", exc)
+            log.debug("Upload traceback:\n%s", traceback.format_exc())
             self._set_qb_status("Connection Failed", state="disconnected")
-            messagebox.showerror("QuickBooks Upload Error", str(exc))
+            messagebox.showerror(
+                "QuickBooks Upload Error",
+                f"{exc}\n\nSee the Log menu for details (file: {LOG_PATH}).",
+            )
 
 
 def main():

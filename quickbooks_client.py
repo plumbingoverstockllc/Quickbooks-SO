@@ -1,12 +1,41 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
+import subprocess
+import traceback
 import xml.etree.ElementTree as ET
 from typing import Iterable, List
 
 import pythoncom
 import win32com.client
+
+
+log = logging.getLogger("qb_so_app.quickbooks")
+
+_QB_PROCESS_NAMES = ("qbw32.exe", "qbw64.exe", "qbw.exe")
+
+
+def _is_quickbooks_running() -> bool:
+    """Return True if a QuickBooks Desktop process is visible to this Windows session.
+
+    Note: an elevated QuickBooks process running in a different UAC context may
+    still be hidden from a non-elevated tasklist call, but the common case (QB
+    running at the same privilege level) is covered.
+    """
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+    except Exception:
+        return False
+    output = result.stdout.lower()
+    return any(name in output for name in _QB_PROCESS_NAMES)
 
 
 class QuickBooksClient:
@@ -17,27 +46,91 @@ class QuickBooksClient:
         self._ticket = None
 
     def connect(self) -> None:
+        log.info("connect(): app_name=%r, company_file_path=%r", self.app_name, self.company_file_path)
         pythoncom.CoInitialize()
-        self._rp = win32com.client.Dispatch("QBXMLRP2.RequestProcessor")
-        self._rp.OpenConnection2("", self.app_name, 1)
+        log.debug("connect(): CoInitialize OK")
+        try:
+            self._rp = win32com.client.Dispatch("QBXMLRP2.RequestProcessor")
+            log.debug("connect(): Dispatched QBXMLRP2.RequestProcessor")
+        except Exception as exc:
+            log.exception("connect(): Dispatch failed")
+            pythoncom.CoUninitialize()
+            raise RuntimeError(
+                "Could not load the QuickBooks SDK (QBXMLRP2.RequestProcessor). "
+                "Make sure QuickBooks Desktop is installed on this machine."
+                f"\n\nDetails: {exc}"
+            )
 
-        # Order matters: attach to whatever QuickBooks already has open first.
-        # If we pass a path while QB has a different file open, QBXMLRP2 will
-        # try to launch a second QB / open the file, which is what we want to
-        # avoid. Only fall back to the saved path when no live session exists.
-        path_candidates: list[str] = [""]
+        try:
+            self._rp.OpenConnection2("", self.app_name, 1)
+            log.debug("connect(): OpenConnection2 OK")
+        except Exception as exc:
+            log.exception("connect(): OpenConnection2 failed")
+            self.close()
+            raise RuntimeError(f"QuickBooks OpenConnection2 failed: {exc}")
+
+        qb_already_running = _is_quickbooks_running()
+        log.info("connect(): QB process detected = %s", qb_already_running)
+
+        # First: try to attach to whatever QuickBooks already has open. Passing
+        # an empty path tells QBXMLRP2 to use the current session if one exists.
+        # Keep the FIRST failure (mode 2 = DontCare) — that's the most diagnostic
+        # error to surface, since the later modes typically fail for the same
+        # reason but with less specific text.
+        attach_error = None
+        for open_mode in (2, 0, 1):  # 2=DontCare, 0=SingleUser, 1=MultiUser
+            try:
+                log.debug("connect(): BeginSession(path='', mode=%d)", open_mode)
+                self._ticket = self._rp.BeginSession("", open_mode)
+                log.info("connect(): attached to running session (mode=%d)", open_mode)
+                return
+            except Exception as exc:
+                log.warning("connect(): BeginSession(path='', mode=%d) failed — %s", open_mode, exc)
+                if attach_error is None:
+                    attach_error = exc
+
+        # If QB is already running but we couldn't attach, do NOT fall back to a
+        # path-based BeginSession — that would launch a *second* QB instance and
+        # trigger the misleading "multiple instances" error (-2147220424). Surface
+        # the real attach error instead, so the user (and our error handler in
+        # app.py) can see if it's a missing authorization, a permissions issue, etc.
+        if qb_already_running:
+            log.error("connect(): QB is running but attach failed; not falling through to path-based launch")
+            self.close()
+            raise RuntimeError(
+                "QuickBooks Desktop is running, but this app could not attach to the open "
+                "company file. Common causes: the app has not been granted access to this "
+                "specific company file by a QuickBooks Admin, or QuickBooks is at the "
+                "\"No Company Open\" / login screen rather than fully loaded into the file."
+                f"\n\nDetails: {attach_error}"
+            )
+
+        # No QB process detected — fall back to launching it via the saved path.
+        launch_error = None
         if self.company_file_path:
-            path_candidates.append(self.company_file_path)
-
-        last_error = None
-        for path in path_candidates:
-            for open_mode in (2, 0, 1):  # 2=DontCare, 0=SingleUser, 1=MultiUser
+            for open_mode in (2, 0, 1):
                 try:
-                    self._ticket = self._rp.BeginSession(path, open_mode)
+                    log.debug(
+                        "connect(): BeginSession(path=%r, mode=%d)",
+                        self.company_file_path,
+                        open_mode,
+                    )
+                    self._ticket = self._rp.BeginSession(self.company_file_path, open_mode)
+                    log.info("connect(): launched QB with saved path (mode=%d)", open_mode)
                     return
                 except Exception as exc:
-                    last_error = exc
+                    log.warning(
+                        "connect(): BeginSession(path=%r, mode=%d) failed — %s",
+                        self.company_file_path,
+                        open_mode,
+                        exc,
+                    )
+                    if launch_error is None:
+                        launch_error = exc
+        else:
+            log.warning("connect(): no company_file_path set, cannot launch QB")
 
+        log.error("connect(): all attempts failed (attach=%s, launch=%s)", attach_error, launch_error)
         self.close()
         hint = ""
         if not self.company_file_path:
@@ -48,7 +141,7 @@ class QuickBooksClient:
         raise RuntimeError(
             "Could not connect to QuickBooks Desktop. Open QuickBooks and your company file first, "
             "then run this app with the same Windows user/session as QuickBooks."
-            f"{hint}\n\nDetails: {last_error}"
+            f"{hint}\n\nDetails: {launch_error or attach_error}"
         )
 
     def close(self) -> None:
