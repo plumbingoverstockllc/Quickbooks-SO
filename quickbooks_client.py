@@ -38,10 +38,26 @@ def _is_quickbooks_running() -> bool:
     return any(name in output for name in _QB_PROCESS_NAMES)
 
 
+def _is_no_company_open_error(exc: Exception | None) -> bool:
+    if exc is None:
+        return False
+    text = str(exc).lower()
+    return (
+        "if the quickbooks company data file is not open" in text
+        or "must include the name of the data file" in text
+        or "-2147220457" in text
+    )
+
+
+def _normalize_company_path(path: str) -> str:
+    normalized = (path or "").strip().replace("/", "\\")
+    return normalized
+
+
 class QuickBooksClient:
     def __init__(self, app_name: str = "SO Desktop App", company_file_path: str = "") -> None:
         self.app_name = app_name
-        self.company_file_path = (company_file_path or "").strip()
+        self.company_file_path = _normalize_company_path(company_file_path)
         self._rp = None
         self._ticket = None
 
@@ -89,24 +105,50 @@ class QuickBooksClient:
                 if attach_error is None:
                     attach_error = exc
 
-        # If QB is already running but we couldn't attach, do NOT fall back to a
-        # path-based BeginSession — that would launch a *second* QB instance and
-        # trigger the misleading "multiple instances" error (-2147220424). Surface
-        # the real attach error instead, so the user (and our error handler in
-        # app.py) can see if it's a missing authorization, a permissions issue, etc.
+        launch_error = None
+        # If QB is running but appears to be at "No Company Open", we can safely
+        # attempt a path-based BeginSession to open the configured company file.
+        # This fixes the common "QB is open and waiting" state where attach-only
+        # fails with -2147220457.
         if qb_already_running:
-            log.error("connect(): QB is running but attach failed; not falling through to path-based launch")
+            if self.company_file_path and _is_no_company_open_error(attach_error):
+                log.warning(
+                    "connect(): QB is running but no company is open; attempting configured path=%r",
+                    self.company_file_path,
+                )
+                for open_mode in (2, 0, 1):
+                    try:
+                        log.debug(
+                            "connect(): BeginSession(path=%r, mode=%d) while QB already running",
+                            self.company_file_path,
+                            open_mode,
+                        )
+                        self._ticket = self._rp.BeginSession(self.company_file_path, open_mode)
+                        log.info("connect(): opened configured company file in running QB (mode=%d)", open_mode)
+                        return
+                    except Exception as exc:
+                        log.warning(
+                            "connect(): BeginSession(path=%r, mode=%d) while QB running failed — %s",
+                            self.company_file_path,
+                            open_mode,
+                            exc,
+                        )
+                        if launch_error is None:
+                            launch_error = exc
+
+            log.error("connect(): QB is running but attach failed; no successful safe recovery path")
             self.close()
             raise RuntimeError(
                 "QuickBooks Desktop is running, but this app could not attach to the open "
                 "company file. Common causes: the app has not been granted access to this "
-                "specific company file by a QuickBooks Admin, or QuickBooks is at the "
-                "\"No Company Open\" / login screen rather than fully loaded into the file."
-                f"\n\nDetails: {attach_error}"
+                "specific company file by a QuickBooks Admin, QuickBooks is at the "
+                "\"No Company Open\" / login screen, or this app is running in a different "
+                "Windows/UAC context than QuickBooks."
+                f"\n\nAttach details: {attach_error}"
+                + (f"\nLaunch details: {launch_error}" if launch_error else "")
             )
 
         # No QB process detected — fall back to launching it via the saved path.
-        launch_error = None
         if self.company_file_path:
             for open_mode in (2, 0, 1):
                 try:

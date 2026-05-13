@@ -58,32 +58,32 @@ log.info("Settings dir: %s", SETTINGS_DIR)
 log.info("Log file: %s", LOG_PATH)
 
 UI = {
-    "bg_window": "#E8EEF6",
+    "bg_window": "#F7F7F7",
     "bg_card": "#FFFFFF",
-    "bg_subtle": "#F4F7FB",
-    "bg_hover": "#EAF1F9",
-    "bg_pressed": "#D9E4F1",
-    "border": "#A6BCD4",
-    "border_strong": "#7E9AB8",
+    "bg_subtle": "#F4F4F4",
+    "bg_hover": "#EFEFEF",
+    "bg_pressed": "#E7E7E7",
+    "border": "#DDDDDD",
+    "border_strong": "#C8C8C8",
     "border_inner_light": "#FFFFFF",
-    "text_primary": "#1F2937",
-    "text_secondary": "#4B5C70",
-    "text_tertiary": "#8896A8",
-    "accent": "#0067C0",
-    "accent_light": "#2E8AE2",
-    "accent_hover": "#1078D4",
-    "accent_pressed": "#004E94",
-    "accent_dark": "#003E78",
-    "accent_bg": "#D9EAF7",
-    "btn_light_top": "#FDFEFF",
-    "btn_light_bottom": "#D8E2EE",
-    "btn_light_border": "#7A95B3",
-    "success": "#0F6B4F",
-    "success_bg": "#D6F2E4",
-    "warning": "#92400E",
-    "warning_bg": "#FCEFCB",
-    "danger": "#B91C1C",
-    "danger_bg": "#FBD5D5",
+    "text_primary": "#222222",
+    "text_secondary": "#6A6A6A",
+    "text_tertiary": "#A1A1A1",
+    "accent": "#FF385C",
+    "accent_light": "#FF5A78",
+    "accent_hover": "#E31C5F",
+    "accent_pressed": "#D70466",
+    "accent_dark": "#C1355D",
+    "accent_bg": "#FFE8EE",
+    "btn_light_top": "#FFFFFF",
+    "btn_light_bottom": "#F7F7F7",
+    "btn_light_border": "#DDDDDD",
+    "success": "#008A05",
+    "success_bg": "#EAF8EA",
+    "warning": "#B05D00",
+    "warning_bg": "#FFF3E4",
+    "danger": "#C13515",
+    "danger_bg": "#FDECEA",
 }
 
 
@@ -433,6 +433,7 @@ class SalesOrderApp:
         self.currency_var = tk.StringVar(value=self.settings.get("currency", "USD"))
         self.tax_code_var = tk.StringVar(value=self.settings.get("tax_code", "TAX"))
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
+        self.auto_connect_on_startup = bool(self.settings.get("auto_connect_on_startup", False))
         self.pricing_mode = self.settings.get("pricing_mode", "brand")
         self.use_actual_cost = bool(self.settings.get("use_actual_cost", False))
         self.default_pricing_value = float(self.settings.get("default_pricing_value", 0.4))
@@ -446,7 +447,10 @@ class SalesOrderApp:
         self._build_layout()
         self._build_menu()
         self._set_qb_status("Not Connected", state="disconnected")
-        self.root.after(900, self._connect_quickbooks_on_startup)
+        if self.auto_connect_on_startup:
+            self.root.after(900, self._connect_quickbooks_on_startup)
+        else:
+            log.info("Auto-connect on startup disabled")
         self.root.after(1200, self.check_for_updates_on_startup)
 
     def _configure_styles(self) -> None:
@@ -479,7 +483,7 @@ class SalesOrderApp:
             "Header.TLabel",
             background=c["bg_window"],
             foreground=c["text_primary"],
-            font=("Segoe UI Semibold", 16),
+            font=("Segoe UI Semibold", 18),
         )
         self.style.configure(
             "SubHeader.TLabel",
@@ -532,15 +536,15 @@ class SalesOrderApp:
             lightcolor=c["border_inner_light"],
             darkcolor=c["border"],
             borderwidth=1,
-            relief="ridge",
-            padding=(14, 6, 14, 10),
+            relief="solid",
+            padding=(16, 10, 16, 12),
         )
         self.style.configure(
             "Card.TLabelframe.Label",
             background=c["bg_card"],
             foreground=c["text_primary"],
             font=("Segoe UI Semibold", 11),
-            padding=(6, 2),
+            padding=(8, 4),
         )
 
         self.style.configure(
@@ -551,8 +555,8 @@ class SalesOrderApp:
             lightcolor=c["border_strong"],
             darkcolor=c["border"],
             insertcolor=c["text_primary"],
-            borderwidth=2,
-            padding=(8, 6),
+            borderwidth=1,
+            padding=(10, 8),
             relief="solid",
         )
         self.style.map(
@@ -566,7 +570,7 @@ class SalesOrderApp:
 
         self.style.configure(
             "TButton",
-            padding=(14, 8),
+            padding=(14, 9),
             font=("Segoe UI", 10),
             background=c["bg_card"],
             foreground=c["text_primary"],
@@ -575,7 +579,7 @@ class SalesOrderApp:
             darkcolor=c["btn_light_bottom"],
             borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "TButton",
@@ -585,13 +589,13 @@ class SalesOrderApp:
                 ("disabled", c["bg_hover"]),
             ],
             foreground=[("disabled", c["text_tertiary"])],
-            relief=[("pressed", "sunken")],
+            relief=[("pressed", "flat")],
             bordercolor=[("active", c["accent_light"]), ("pressed", c["accent"])],
         )
 
         self.style.configure(
             "Primary.TButton",
-            padding=(20, 9),
+            padding=(20, 10),
             font=("Segoe UI Semibold", 10),
             background=c["accent"],
             foreground="#FFFFFF",
@@ -600,7 +604,7 @@ class SalesOrderApp:
             darkcolor=c["accent_dark"],
             borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Primary.TButton",
@@ -618,7 +622,7 @@ class SalesOrderApp:
                 ("pressed", c["accent_light"]),
                 ("active", c["accent_pressed"]),
             ],
-            relief=[("pressed", "sunken")],
+            relief=[("pressed", "flat")],
             bordercolor=[
                 ("pressed", c["accent_dark"]),
                 ("active", c["accent_pressed"]),
@@ -636,7 +640,7 @@ class SalesOrderApp:
             darkcolor=c["accent_bg"],
             borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Accent.TButton",
@@ -650,7 +654,7 @@ class SalesOrderApp:
                 ("active", c["accent_hover"]),
                 ("disabled", c["text_tertiary"]),
             ],
-            relief=[("pressed", "sunken")],
+            relief=[("pressed", "flat")],
             bordercolor=[
                 ("pressed", c["accent_dark"]),
                 ("active", c["accent_light"]),
@@ -669,7 +673,7 @@ class SalesOrderApp:
             darkcolor=c["btn_light_bottom"],
             borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Quiet.TButton",
@@ -678,7 +682,7 @@ class SalesOrderApp:
                 ("active", c["bg_hover"]),
             ],
             foreground=[("disabled", c["text_tertiary"])],
-            relief=[("pressed", "sunken")],
+            relief=[("pressed", "flat")],
             bordercolor=[("active", c["accent_light"]), ("pressed", c["accent"])],
         )
 
@@ -687,7 +691,7 @@ class SalesOrderApp:
             background=c["bg_card"],
             fieldbackground=c["bg_card"],
             foreground=c["text_primary"],
-            rowheight=24,
+            rowheight=28,
             borderwidth=1,
             relief="solid",
             bordercolor=c["border"],
@@ -698,12 +702,12 @@ class SalesOrderApp:
             background=c["bg_subtle"],
             foreground=c["text_primary"],
             font=("Segoe UI Semibold", 9),
-            padding=(10, 8),
+            padding=(12, 10),
             borderwidth=1,
             lightcolor=c["bg_card"],
             darkcolor=c["border"],
             bordercolor=c["border"],
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Treeview.Heading",
@@ -724,7 +728,7 @@ class SalesOrderApp:
         )
         self.style.configure(
             "TNotebook.Tab",
-            padding=(16, 5),
+            padding=(16, 8),
             background=c["bg_subtle"],
             foreground=c["text_secondary"],
             borderwidth=0,
@@ -1096,6 +1100,7 @@ class SalesOrderApp:
             "currency": self.currency_var.get().strip(),
             "tax_code": self.tax_code_var.get().strip(),
             "qb_company_file_path": self.qb_company_file_var.get().strip(),
+            "auto_connect_on_startup": self.auto_connect_on_startup,
             "pricing_mode": self.pricing_mode,
             "use_actual_cost": self.use_actual_cost,
             "default_pricing_value": self.default_pricing_value,
@@ -1110,19 +1115,19 @@ class SalesOrderApp:
         root = self.root
         c = UI
 
-        header = ttk.Frame(root, padding=(20, 6, 20, 2))
+        header = ttk.Frame(root, padding=(26, 14, 26, 8))
         header.pack(fill="x")
         title_row = ttk.Frame(header)
         title_row.pack(fill="x")
-        ttk.Label(title_row, text="Sales Order Converter", style="Header.TLabel").pack(side="left")
+        ttk.Label(title_row, text="QB Sales Order Converter", style="Header.TLabel").pack(side="left")
         ttk.Label(
-            title_row,
-            text=f"  {APP_VERSION}  ·  Upload a source file, review mapped rows, then export or upload to QuickBooks Desktop.",
+            header,
+            text=f"{APP_VERSION} · Upload source data, review mapped rows, then export or upload to QuickBooks Desktop.",
             style="SubHeader.TLabel",
-        ).pack(side="left", pady=(6, 0))
+        ).pack(anchor="w", pady=(2, 0))
 
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
-        config.pack(fill="x", padx=20, pady=(2, 4))
+        config.pack(fill="x", padx=26, pady=(2, 8))
 
         self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
         self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
@@ -1193,7 +1198,7 @@ class SalesOrderApp:
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
 
-        actions = ttk.Frame(root, padding=(20, 2, 20, 4))
+        actions = ttk.Frame(root, padding=(26, 2, 26, 8))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
         ttk.Button(
@@ -1222,7 +1227,7 @@ class SalesOrderApp:
         ).pack(side="left")
 
         content = ttk.Panedwindow(root, orient="vertical")
-        content.pack(fill="both", expand=True, padx=20, pady=(0, 2))
+        content.pack(fill="both", expand=True, padx=26, pady=(0, 6))
 
         preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
         content.add(preview_frame, weight=12)
