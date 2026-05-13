@@ -22,33 +22,39 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.55 Beta"
+APP_VERSION = "v0.9.56 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 
 UI = {
-    "bg_window": "#F3F3F3",
+    "bg_window": "#E8EEF6",
     "bg_card": "#FFFFFF",
-    "bg_subtle": "#FAFAFB",
-    "bg_hover": "#F5F5F7",
-    "bg_pressed": "#EBEBED",
-    "border": "#E5E5EA",
-    "border_strong": "#D1D5DB",
+    "bg_subtle": "#F4F7FB",
+    "bg_hover": "#EAF1F9",
+    "bg_pressed": "#D9E4F1",
+    "border": "#A6BCD4",
+    "border_strong": "#7E9AB8",
+    "border_inner_light": "#FFFFFF",
     "text_primary": "#1F2937",
-    "text_secondary": "#6B7280",
-    "text_tertiary": "#9CA3AF",
-    "accent": "#0078D4",
-    "accent_hover": "#106EBE",
-    "accent_pressed": "#005A9E",
-    "accent_bg": "#EDF4FB",
-    "success": "#065F46",
-    "success_bg": "#DFF6DD",
+    "text_secondary": "#4B5C70",
+    "text_tertiary": "#8896A8",
+    "accent": "#0067C0",
+    "accent_light": "#2E8AE2",
+    "accent_hover": "#1078D4",
+    "accent_pressed": "#004E94",
+    "accent_dark": "#003E78",
+    "accent_bg": "#D9EAF7",
+    "btn_light_top": "#FDFEFF",
+    "btn_light_bottom": "#D8E2EE",
+    "btn_light_border": "#7A95B3",
+    "success": "#0F6B4F",
+    "success_bg": "#D6F2E4",
     "warning": "#92400E",
-    "warning_bg": "#FEF3C7",
+    "warning_bg": "#FCEFCB",
     "danger": "#B91C1C",
-    "danger_bg": "#FEE2E2",
+    "danger_bg": "#FBD5D5",
 }
 
 
@@ -372,8 +378,8 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
-        self.root.geometry("1360x860")
-        self.root.minsize(1200, 760)
+        self.root.geometry("1440x960")
+        self.root.minsize(1240, 820)
         self.style = ttk.Style()
         self.style.theme_use("clam")
         self._configure_styles()
@@ -390,16 +396,8 @@ class SalesOrderApp:
         self.output_path_var = tk.StringVar(value=self.settings.get("output_path", DEFAULT_OUTPUT))
         self.customer_var = tk.StringVar(value=self.settings.get("customer", ""))
         self.sales_order_no_var = tk.StringVar(value=self.settings.get("sales_order_no", ""))
-        self.sales_order_date_var = tk.StringVar(
-            value=self._normalize_date_for_display(
-                self.settings.get("sales_order_date", self._today_display_date())
-            )
-        )
-        self.due_date_var = tk.StringVar(
-            value=self._normalize_date_for_display(
-                self.settings.get("due_date", self._today_display_date())
-            )
-        )
+        self.sales_order_date_var = tk.StringVar(value=self._today_display_date())
+        self.due_date_var = tk.StringVar(value=self._today_display_date())
         self.terms_var = tk.StringVar(value=self.settings.get("terms", "Prepaid"))
         self.shipping_method_var = tk.StringVar(value=self.settings.get("shipping_method", "Standard Ground"))
         self.memo_var = tk.StringVar(value=self.settings.get("memo", ""))
@@ -501,10 +499,10 @@ class SalesOrderApp:
             "Card.TLabelframe",
             background=c["bg_card"],
             bordercolor=c["border"],
-            lightcolor=c["border"],
+            lightcolor=c["border_inner_light"],
             darkcolor=c["border"],
             borderwidth=1,
-            relief="solid",
+            relief="ridge",
             padding=(18, 14, 18, 16),
         )
         self.style.configure(
@@ -521,17 +519,17 @@ class SalesOrderApp:
             foreground=c["text_primary"],
             bordercolor=c["border_strong"],
             lightcolor=c["border_strong"],
-            darkcolor=c["border_strong"],
+            darkcolor=c["border"],
             insertcolor=c["text_primary"],
-            borderwidth=1,
+            borderwidth=2,
             padding=(8, 6),
-            relief="flat",
+            relief="solid",
         )
         self.style.map(
             "TEntry",
-            bordercolor=[("focus", c["accent"])],
-            lightcolor=[("focus", c["accent"])],
-            darkcolor=[("focus", c["accent"])],
+            bordercolor=[("focus", c["accent"]), ("hover", c["accent_light"])],
+            lightcolor=[("focus", c["accent"]), ("hover", c["accent_light"])],
+            darkcolor=[("focus", c["accent"]), ("hover", c["accent_light"])],
             fieldbackground=[("disabled", c["bg_hover"])],
             foreground=[("disabled", c["text_tertiary"])],
         )
@@ -542,18 +540,23 @@ class SalesOrderApp:
             font=("Segoe UI", 10),
             background=c["bg_card"],
             foreground=c["text_primary"],
-            bordercolor=c["border_strong"],
-            lightcolor=c["border_strong"],
-            darkcolor=c["border_strong"],
+            bordercolor=c["btn_light_border"],
+            lightcolor=c["btn_light_top"],
+            darkcolor=c["btn_light_bottom"],
             borderwidth=1,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "TButton",
-            background=[("active", c["bg_hover"]), ("pressed", c["bg_pressed"]), ("disabled", c["bg_hover"])],
+            background=[
+                ("pressed", c["bg_pressed"]),
+                ("active", c["bg_hover"]),
+                ("disabled", c["bg_hover"]),
+            ],
             foreground=[("disabled", c["text_tertiary"])],
-            bordercolor=[("active", c["border_strong"]), ("pressed", c["border_strong"])],
+            relief=[("pressed", "sunken")],
+            bordercolor=[("active", c["accent_light"]), ("pressed", c["accent"])],
         )
 
         self.style.configure(
@@ -562,24 +565,33 @@ class SalesOrderApp:
             font=("Segoe UI Semibold", 10),
             background=c["accent"],
             foreground="#FFFFFF",
-            bordercolor=c["accent"],
-            lightcolor=c["accent"],
-            darkcolor=c["accent"],
-            borderwidth=0,
+            bordercolor=c["accent_dark"],
+            lightcolor=c["accent_light"],
+            darkcolor=c["accent_dark"],
+            borderwidth=1,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Primary.TButton",
             background=[
-                ("active", c["accent_hover"]),
                 ("pressed", c["accent_pressed"]),
+                ("active", c["accent_hover"]),
                 ("disabled", c["border_strong"]),
             ],
-            foreground=[("disabled", c["text_tertiary"])],
+            foreground=[("disabled", c["bg_card"])],
+            lightcolor=[
+                ("pressed", c["accent_dark"]),
+                ("active", "#52A5EF"),
+            ],
+            darkcolor=[
+                ("pressed", c["accent_light"]),
+                ("active", c["accent_pressed"]),
+            ],
+            relief=[("pressed", "sunken")],
             bordercolor=[
-                ("active", c["accent_hover"]),
-                ("pressed", c["accent_pressed"]),
+                ("pressed", c["accent_dark"]),
+                ("active", c["accent_pressed"]),
             ],
         )
 
@@ -590,25 +602,28 @@ class SalesOrderApp:
             background=c["bg_card"],
             foreground=c["accent"],
             bordercolor=c["accent"],
-            lightcolor=c["accent"],
-            darkcolor=c["accent"],
+            lightcolor=c["btn_light_top"],
+            darkcolor=c["accent_bg"],
             borderwidth=1,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Accent.TButton",
             background=[
-                ("active", c["accent_bg"]),
                 ("pressed", c["accent_bg"]),
+                ("active", c["bg_hover"]),
                 ("disabled", c["bg_hover"]),
             ],
             foreground=[
-                ("active", c["accent_pressed"]),
+                ("pressed", c["accent_pressed"]),
+                ("active", c["accent_hover"]),
                 ("disabled", c["text_tertiary"]),
             ],
+            relief=[("pressed", "sunken")],
             bordercolor=[
-                ("active", c["accent_pressed"]),
+                ("pressed", c["accent_dark"]),
+                ("active", c["accent_light"]),
                 ("disabled", c["border"]),
             ],
         )
@@ -618,19 +633,23 @@ class SalesOrderApp:
             padding=(14, 8),
             font=("Segoe UI", 10),
             background=c["bg_card"],
-            foreground=c["text_secondary"],
-            bordercolor=c["border"],
-            lightcolor=c["border"],
-            darkcolor=c["border"],
+            foreground=c["text_primary"],
+            bordercolor=c["btn_light_border"],
+            lightcolor=c["btn_light_top"],
+            darkcolor=c["btn_light_bottom"],
             borderwidth=1,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Quiet.TButton",
-            background=[("active", c["bg_hover"]), ("pressed", c["bg_pressed"])],
-            foreground=[("active", c["text_primary"]), ("disabled", c["text_tertiary"])],
-            bordercolor=[("active", c["border_strong"])],
+            background=[
+                ("pressed", c["bg_pressed"]),
+                ("active", c["bg_hover"]),
+            ],
+            foreground=[("disabled", c["text_tertiary"])],
+            relief=[("pressed", "sunken")],
+            bordercolor=[("active", c["accent_light"]), ("pressed", c["accent"])],
         )
 
         self.style.configure(
@@ -639,18 +658,22 @@ class SalesOrderApp:
             fieldbackground=c["bg_card"],
             foreground=c["text_primary"],
             rowheight=30,
-            borderwidth=0,
-            relief="flat",
+            borderwidth=1,
+            relief="solid",
+            bordercolor=c["border"],
             font=("Segoe UI", 10),
         )
         self.style.configure(
             "Treeview.Heading",
             background=c["bg_subtle"],
-            foreground=c["text_secondary"],
+            foreground=c["text_primary"],
             font=("Segoe UI Semibold", 9),
             padding=(10, 8),
-            borderwidth=0,
-            relief="flat",
+            borderwidth=1,
+            lightcolor=c["bg_card"],
+            darkcolor=c["border"],
+            bordercolor=c["border"],
+            relief="raised",
         )
         self.style.map(
             "Treeview.Heading",
@@ -705,12 +728,13 @@ class SalesOrderApp:
         self.style.configure("TPanedwindow", background=c["bg_window"])
         self.style.configure(
             "Sash",
-            sashthickness=6,
-            gripcount=0,
+            sashthickness=8,
+            gripcount=8,
             background=c["bg_window"],
-            bordercolor=c["bg_window"],
-            lightcolor=c["bg_window"],
-            darkcolor=c["bg_window"],
+            bordercolor=c["border"],
+            lightcolor=c["bg_card"],
+            darkcolor=c["border_strong"],
+            handlesize=20,
         )
 
         self.style.configure(
@@ -1033,13 +1057,13 @@ class SalesOrderApp:
             form,
             text="Date format: MM/DD/YYYY (example: 05/12/2026)",
             style="CardSubHeader.TLabel",
-        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 6))
+        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(2, 4))
 
-        self._form_entry(form, "Terms", self.terms_var, 2, 0, 1)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 2, 1, 1)
-        self._form_entry(form, "Memo", self.memo_var, 2, 2, 2)
-        self._form_entry(form, "Currency", self.currency_var, 2, 4, 1)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 2, 5, 1)
+        self._form_entry(form, "Terms", self.terms_var, 3, 0, 1)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 1, 1)
+        self._form_entry(form, "Memo", self.memo_var, 3, 2, 2)
+        self._form_entry(form, "Currency", self.currency_var, 3, 4, 1)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 5, 1)
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(14, 0))
@@ -1113,7 +1137,7 @@ class SalesOrderApp:
         content.pack(fill="both", expand=True, padx=22, pady=(0, 8))
 
         preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
-        content.add(preview_frame, weight=3)
+        content.add(preview_frame, weight=6)
 
         self.preview_notebook = ttk.Notebook(preview_frame)
         self.preview_notebook.pack(fill="both", expand=True)
@@ -1180,7 +1204,7 @@ class SalesOrderApp:
         content.add(error_frame, weight=1)
         self.error_text = tk.Text(
             error_frame,
-            height=8,
+            height=5,
             wrap="word",
             bg=c["bg_card"],
             fg=c["text_primary"],
