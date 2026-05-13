@@ -1,6 +1,6 @@
 {
-  "version": "0.9.62",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.62/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "6ed4e58642d01fd8f90d07474c0db2794bd9f0b01ee944d47587cff7642d2c2b",
-  "notes": "Adds a Log menu (next to Help) that writes every Connect/Fetch/Upload action and error to %APPDATA%\\QB Sales Order Converter\\app.log for easier diagnosis. Connect to QuickBooks Desktop no longer falls back to launching a second QuickBooks instance when one is already running — instead surfaces the real attach error (e.g. missing per-company-file authorization)."
+  "version": "0.9.63",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.63/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6062ebb78d05b59635bacfa3001057ca0638652ebd4469e7abb6778bf96e2e0d",
+  "notes": "Log menu now opens the log file in Notepad explicitly, so it no longer follows the system's .log file association (which on some machines launched QuickBooks)."
 }

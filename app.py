@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.62 Beta"
+APP_VERSION = "v0.9.63 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -846,7 +846,10 @@ class SalesOrderApp:
         try:
             LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
             LOG_PATH.touch(exist_ok=True)
-            os.startfile(str(LOG_PATH))
+            # Use notepad explicitly. os.startfile would honor the user's .log
+            # file association, which on some machines is wired to QuickBooks's
+            # log viewer (or other tools) — we just want a plain text reader.
+            subprocess.Popen(["notepad.exe", str(LOG_PATH)])
         except Exception as exc:
             log.exception("Failed to open log file")
             messagebox.showerror(
