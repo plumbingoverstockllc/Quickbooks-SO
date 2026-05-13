@@ -1,6 +1,6 @@
 {
-  "version": "0.9.705",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.705/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "9cc6ba65e7b8de4d4535757adf0151940655e61f73dfd120d5909ddc44034419",
-  "notes": "Blocks BeginSession when app is elevated or when QuickBooks/app UAC levels mismatch, preventing secondary QuickBooks window spawning in mixed-context environments."
+  "version": "0.9.706",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.706/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "54a6252ef508febeb884e75f0fb1ccd4eb21bf6359462b4b4664f137f2564527",
+  "notes": "Uses a single safe mode-2 attach attempt, blocks Secondary-window states before BeginSession, and surfaces explicit QuickBooks host/network session-loss errors."
 }
