@@ -1,6 +1,6 @@
 {
-  "version": "0.9.704",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.704/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "815166786bcf4a09ac676b7e2c0c25febe8a1d384b59de52dc8ea24d5d0c925a",
-  "notes": "Prevents BeginSession calls when QuickBooks is at No Company Open, so the app fails fast without triggering additional QuickBooks window side effects."
+  "version": "0.9.705",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.705/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "9cc6ba65e7b8de4d4535757adf0151940655e61f73dfd120d5909ddc44034419",
+  "notes": "Blocks BeginSession when app is elevated or when QuickBooks/app UAC levels mismatch, preventing secondary QuickBooks window spawning in mixed-context environments."
 }
