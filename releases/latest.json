@@ -1,6 +1,6 @@
 {
-  "version": "0.9.47.1",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.47.1/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "fff205f8e712b62a653377ca8f57d57ffd0e2a69811d9c62d9d50e8763143d08",
-  "notes": "Strict DD-MM-YYYY dates, stable shortcut target, update progress UI, and automatic app relaunch after update."
+  "version": "0.9.47.2",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.47.2/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "074068a1ea292601a8b7513c99df507eb75f5b8cac8383dc3db9754990e0df68",
+  "notes": "DD-MM-YYYY date format clarification and tax fields set to None in exports."
 }

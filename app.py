@@ -22,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.47.1 Beta"
+APP_VERSION = "v0.9.47.2 Beta"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
@@ -545,6 +545,9 @@ class SalesOrderApp:
         ttk.Button(form, text="Fetch Next from QuickBooks", command=self.fetch_next_so, style="Quiet.TButton").grid(row=1, column=3, padx=4, sticky="w")
         self._form_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 4, 1)
         self._form_entry(form, "Due Date", self.due_date_var, 0, 5, 1)
+        ttk.Label(form, text="Date format: DD-MM-YYYY (day-month-year)", style="SubHeader.TLabel").grid(
+            row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 6)
+        )
 
         self._form_entry(form, "Terms", self.terms_var, 2, 0, 1)
         self._form_entry(form, "Shipping Method", self.shipping_method_var, 2, 1, 1)

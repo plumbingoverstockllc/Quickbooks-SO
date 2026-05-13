@@ -138,8 +138,8 @@ def transform_to_template(
                 "Product/Service Rate": rate,
                 "Unit of Measure": "$",
                 "Product/Service Sales Tax Code": settings.sales_tax_code,
-                "Sales Tax Item": "",
-                "Customer Sales Tax Code": "",
+                "Sales Tax Item": "None",
+                "Customer Sales Tax Code": "None",
                 "Currency": settings.currency,
             }
         )
