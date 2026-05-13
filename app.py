@@ -22,7 +22,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.56 Beta"
+APP_VERSION = "v0.9.57 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -449,7 +449,7 @@ class SalesOrderApp:
             "Header.TLabel",
             background=c["bg_window"],
             foreground=c["text_primary"],
-            font=("Segoe UI Semibold", 22),
+            font=("Segoe UI Semibold", 16),
         )
         self.style.configure(
             "SubHeader.TLabel",
@@ -473,7 +473,7 @@ class SalesOrderApp:
             "Status.TLabel",
             background=c["bg_window"],
             foreground=c["text_secondary"],
-            padding=(14, 9),
+            padding=(14, 4),
             font=("Segoe UI", 9),
         )
         self.style.configure(
@@ -503,7 +503,7 @@ class SalesOrderApp:
             darkcolor=c["border"],
             borderwidth=1,
             relief="ridge",
-            padding=(18, 14, 18, 16),
+            padding=(14, 6, 14, 10),
         )
         self.style.configure(
             "Card.TLabelframe.Label",
@@ -657,7 +657,7 @@ class SalesOrderApp:
             background=c["bg_card"],
             fieldbackground=c["bg_card"],
             foreground=c["text_primary"],
-            rowheight=30,
+            rowheight=24,
             borderwidth=1,
             relief="solid",
             bordercolor=c["border"],
@@ -694,7 +694,7 @@ class SalesOrderApp:
         )
         self.style.configure(
             "TNotebook.Tab",
-            padding=(18, 9),
+            padding=(16, 5),
             background=c["bg_subtle"],
             foreground=c["text_secondary"],
             borderwidth=0,
@@ -1025,24 +1025,26 @@ class SalesOrderApp:
         root = self.root
         c = UI
 
-        header = ttk.Frame(root, padding=(22, 20, 22, 14))
+        header = ttk.Frame(root, padding=(20, 6, 20, 2))
         header.pack(fill="x")
-        ttk.Label(header, text="Sales Order Converter", style="Header.TLabel").pack(anchor="w")
+        title_row = ttk.Frame(header)
+        title_row.pack(fill="x")
+        ttk.Label(title_row, text="Sales Order Converter", style="Header.TLabel").pack(side="left")
         ttk.Label(
-            header,
-            text=f"{APP_VERSION}  ·  Upload a source file, review mapped template rows, then export or upload directly to QuickBooks Desktop.",
+            title_row,
+            text=f"  {APP_VERSION}  ·  Upload a source file, review mapped rows, then export or upload to QuickBooks Desktop.",
             style="SubHeader.TLabel",
-        ).pack(anchor="w", pady=(4, 0))
+        ).pack(side="left", pady=(6, 0))
 
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
-        config.pack(fill="x", padx=22, pady=(4, 10))
+        config.pack(fill="x", padx=20, pady=(2, 4))
 
         self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
         self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
         self._path_row(config, "Output File", self.output_path_var, self._browse_output, 2)
 
         form = ttk.Frame(config, style="Card.TFrame")
-        form.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        form.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         for i in range(6):
             form.columnconfigure(i, weight=1)
 
@@ -1057,7 +1059,7 @@ class SalesOrderApp:
             form,
             text="Date format: MM/DD/YYYY (example: 05/12/2026)",
             style="CardSubHeader.TLabel",
-        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(2, 4))
+        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 2))
 
         self._form_entry(form, "Terms", self.terms_var, 3, 0, 1)
         self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 1, 1)
@@ -1066,7 +1068,7 @@ class SalesOrderApp:
         self._form_entry(form, "Tax Code", self.tax_code_var, 3, 5, 1)
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
-        qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        qb_bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         ttk.Button(
             qb_bar,
             text="Connect to QuickBooks Desktop",
@@ -1105,7 +1107,7 @@ class SalesOrderApp:
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
 
-        actions = ttk.Frame(root, padding=(22, 4, 22, 12))
+        actions = ttk.Frame(root, padding=(20, 2, 20, 4))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
         ttk.Button(
@@ -1134,10 +1136,10 @@ class SalesOrderApp:
         ).pack(side="left")
 
         content = ttk.Panedwindow(root, orient="vertical")
-        content.pack(fill="both", expand=True, padx=22, pady=(0, 8))
+        content.pack(fill="both", expand=True, padx=20, pady=(0, 2))
 
         preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
-        content.add(preview_frame, weight=6)
+        content.add(preview_frame, weight=12)
 
         self.preview_notebook = ttk.Notebook(preview_frame)
         self.preview_notebook.pack(fill="both", expand=True)
@@ -1204,7 +1206,7 @@ class SalesOrderApp:
         content.add(error_frame, weight=1)
         self.error_text = tk.Text(
             error_frame,
-            height=5,
+            height=3,
             wrap="word",
             bg=c["bg_card"],
             fg=c["text_primary"],
@@ -1228,20 +1230,20 @@ class SalesOrderApp:
 
     def _path_row(self, parent, label, var, browse_cmd, row_idx):
         ttk.Label(parent, text=label, style="Card.TLabel", width=18).grid(
-            row=row_idx, column=0, sticky="w", pady=(6, 6)
+            row=row_idx, column=0, sticky="w", pady=(2, 2)
         )
-        ttk.Entry(parent, textvariable=var).grid(row=row_idx, column=1, sticky="ew", padx=10, pady=(6, 6))
+        ttk.Entry(parent, textvariable=var).grid(row=row_idx, column=1, sticky="ew", padx=10, pady=(2, 2))
         ttk.Button(parent, text="Browse", command=browse_cmd).grid(
-            row=row_idx, column=2, sticky="e", pady=(6, 6)
+            row=row_idx, column=2, sticky="e", pady=(2, 2)
         )
         parent.columnconfigure(1, weight=1)
 
     def _form_entry(self, parent, label, var, row, col, span):
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
-            row=row, column=col, sticky="w", padx=4, pady=(8, 2)
+            row=row, column=col, sticky="w", padx=4, pady=(4, 1)
         )
         ttk.Entry(parent, textvariable=var).grid(
-            row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 8)
+            row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
 
     def _tree_values_from_row(self, row, row_index: int | None = None) -> tuple:

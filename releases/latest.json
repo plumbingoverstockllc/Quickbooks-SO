@@ -1,6 +1,6 @@
 {
-  "version": "0.9.56",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.56/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4752b4305d8c34cb1b59e09a11c6adb5a4145d8e6fda78dab3a6a76f0cda3f43",
-  "notes": "Aero-style depth restored, larger preview pane, date hint no longer overlaps Currency, and Sales Order / Due dates always default to today on launch."
+  "version": "0.9.57",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.57/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "d8fc7a3c4b72ebe7d51550ae7ca34dcdb778bca91e9ddb645740f6c31ae09bea",
+  "notes": "Built against Python 3.12 to fix the python314.dll load error during update. Tightened layout: smaller header, compact form rows, and a much taller Preview pane."
 }
