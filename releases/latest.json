@@ -1,6 +1,6 @@
 {
-  "version": "0.9.63",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.63/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "6062ebb78d05b59635bacfa3001057ca0638652ebd4469e7abb6778bf96e2e0d",
+  "version": "0.9.631",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.631/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "05c149a19a434ac74c699d9f2e8de066197363ed4f3ea0076cd61e98de9a24ac",
   "notes": "Log menu now opens the log file in Notepad explicitly, so it no longer follows the system's .log file association (which on some machines launched QuickBooks)."
 }
