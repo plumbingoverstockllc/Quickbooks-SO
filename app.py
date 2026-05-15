@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.019b"
+APP_VERSION = "v1.020b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -422,23 +422,31 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
-        # Open at 70% of the available screen, centered. Falls back to a
-        # sensible default if winfo_screen* aren't usable yet.
+        # Window geometry: prefer the value the user last resized to (saved
+        # in settings.json as window_geometry), otherwise open at 70% of
+        # the available screen, centered.
         try:
             self.root.update_idletasks()
             screen_w = self.root.winfo_screenwidth() or 1600
             screen_h = self.root.winfo_screenheight() or 1040
         except tk.TclError:
             screen_w, screen_h = 1600, 1040
-        win_w = max(960, int(screen_w * 0.70))
-        win_h = max(640, int(screen_h * 0.70))
-        x = max(0, (screen_w - win_w) // 2)
-        y = max(0, (screen_h - win_h) // 2)
-        self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+        saved_geom = (self.settings.get("window_geometry") or "").strip()
+        if saved_geom and self._geometry_fits_screen(saved_geom, screen_w, screen_h):
+            self.root.geometry(saved_geom)
+        else:
+            win_w = max(960, int(screen_w * 0.70))
+            win_h = max(640, int(screen_h * 0.70))
+            x = max(0, (screen_w - win_w) // 2)
+            y = max(0, (screen_h - win_h) // 2)
+            self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
         try:
             self.root.minsize(960, 640)
         except tk.TclError:
             pass
+        # Persist window size + position on close so future launches
+        # remember whatever the user resized to.
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.minsize(1240, 820)
         self.style = ttk.Style()
         self.style.theme_use("clam")
@@ -1596,8 +1604,51 @@ class SalesOrderApp:
         except Exception:
             return {}
 
+    def _geometry_fits_screen(self, geom: str, screen_w: int, screen_h: int) -> bool:
+        """Return True when a saved geometry string ("WxH+X+Y") still lands
+        on the current monitor. Guards against a window restoring off-
+        screen if the user resized on a now-disconnected second display."""
+        try:
+            size_part, _, pos_part = geom.partition("+")
+            if "x" not in size_part:
+                return False
+            w_s, h_s = size_part.split("x", 1)
+            w_val, h_val = int(w_s), int(h_s)
+            if pos_part:
+                xs, _, ys = pos_part.partition("+")
+                x_val, y_val = int(xs), int(ys) if ys else 0
+            else:
+                x_val, y_val = 0, 0
+            if w_val < 600 or h_val < 400:
+                return False
+            if x_val < -50 or y_val < -50:
+                return False
+            if x_val + 100 > screen_w or y_val + 100 > screen_h:
+                return False
+            if w_val > screen_w + 100 or h_val > screen_h + 100:
+                return False
+            return True
+        except Exception:
+            return False
+
+    def _on_close(self) -> None:
+        """Save the window's current geometry before tearing down so the
+        next launch can reopen at the same size + position."""
+        try:
+            geom = self.root.winfo_geometry()
+        except tk.TclError:
+            geom = ""
+        if geom:
+            self.settings["window_geometry"] = geom
+            try:
+                self._persist_settings()
+            except Exception:
+                log.exception("_on_close: failed to persist window geometry")
+        self.root.destroy()
+
     def _persist_settings(self) -> None:
         payload = {
+            "window_geometry": self.settings.get("window_geometry", ""),
             "source_path": self.source_path_var.get().strip(),
             "template_path": self.template_path_var.get().strip(),
             "output_path": self.output_path_var.get().strip(),

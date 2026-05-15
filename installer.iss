@@ -1,5 +1,5 @@
 #define MyAppName "QB Sales Order Converter"
-#define MyAppVersion "1.019b"
+#define MyAppVersion "1.020b"
 #define MyAppPublisher "Moshe Adelman DBA RunByItself.com"
 #define MyAppExeName "QB Sales Order Converter.exe"
 
