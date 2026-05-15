@@ -1,6 +1,6 @@
 {
-  "version": "1.020",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.020/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "6c24b7a344eb9bdc2f40dd9bec390f510d75ae6621c4170b01bcaeef6ac02e7c",
-  "notes": "Big UI refresh promoted to stable. Setup menu collects Connect, Admin Setup, Pricing Rules, and Export Template. Validation Messages now sit next to the form. Customer matches Source File width; dates have a calendar picker. Required fields turn red when blank. Upload button is green. App opens at a comfortable default size and remembers whatever size you resize to. Help > About credits Moshe Adelman and Shimiralabs."
+  "version": "1.021",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.021/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "02a4dfd5aa34d8ca9d721e80a5857f861d249a8da8865b41ee2dcabc823be9b4",
+  "notes": "Fixes a startup crash in v1.020 where the saved-window-size code ran before settings were loaded."
 }

@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.020"
+APP_VERSION = "v1.021"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -422,9 +422,16 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
+        self.style = ttk.Style()
+        self.style.theme_use("clam")
+        self._configure_styles()
+        # Load settings BEFORE the geometry block — the saved window size
+        # lives there.
+        self.settings = self._load_settings()
+
         # Window geometry: prefer the value the user last resized to (saved
-        # in settings.json as window_geometry), otherwise open at 70% of
-        # the available screen, centered.
+        # in settings.json as window_geometry), otherwise open at a
+        # comfortable default of 80% width × 75% height, centered.
         try:
             self.root.update_idletasks()
             screen_w = self.root.winfo_screenwidth() or 1600
@@ -435,10 +442,6 @@ class SalesOrderApp:
         if saved_geom and self._geometry_fits_screen(saved_geom, screen_w, screen_h):
             self.root.geometry(saved_geom)
         else:
-            # First-launch default: 80% width × 75% height so the Configuration
-            # card and Validation Messages column both fit without clipping.
-            # The user can resize and that size is persisted to settings.json
-            # via _on_close.
             win_w = max(1100, int(screen_w * 0.80))
             win_h = max(720, int(screen_h * 0.75))
             x = max(0, (screen_w - win_w) // 2)
@@ -451,11 +454,6 @@ class SalesOrderApp:
         # Persist window size + position on close so future launches
         # remember whatever the user resized to.
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.root.minsize(1240, 820)
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
-        self._configure_styles()
-        self.settings = self._load_settings()
 
         self.source_df = None
         self.output_df = None
