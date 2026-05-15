@@ -1,6 +1,6 @@
 {
-  "version": "1.018b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.018b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "641c729e303c8397a38b73c1a30a8d2a28586a7f33e473ca9d3bb6fc5c0baf2c",
-  "notes": "App now opens at 70% of your screen size, centered, instead of a fixed 1600x1040 that was getting cut off on smaller displays. Minimum window size lowered too so the app still fits on shorter screens."
+  "version": "1.019b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.019b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "766fdf4a7b9ffd3e41df56893e9faab1f0e232553068f010c9e6908f5cfd6e4a",
+  "notes": "Check for Beta Update now talks to the GitHub Releases API directly, so new betas show up immediately instead of waiting for the raw-file cache to refresh. Also includes the v1.018b change: the app opens at 70% of your screen size, centered."
 }

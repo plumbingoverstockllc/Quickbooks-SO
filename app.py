@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.018b"
+APP_VERSION = "v1.019b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1142,7 +1142,50 @@ class SalesOrderApp:
         }
 
     def _fetch_beta_release_info(self) -> dict:
-        """Fetch the latest beta release feed. Same shape as the stable feed."""
+        """Find the latest beta release.
+
+        Prefers the GitHub Releases API (no edge cache, sees prereleases)
+        and falls back to the raw beta.json feed only when the API is
+        unreachable. The raw feed lives on raw.githubusercontent.com which
+        has a ~5-minute CDN cache, so betas pushed less than a few minutes
+        ago can otherwise look invisible from inside the app.
+        """
+        api_url = (
+            "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases"
+            f"?per_page=20&t={int(datetime.now().timestamp())}"
+        )
+        try:
+            request = urllib.request.Request(
+                api_url,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=10) as resp:
+                releases = json.loads(resp.read().decode("utf-8"))
+            prereleases = [r for r in releases if r.get("prerelease")]
+            if prereleases:
+                latest = prereleases[0]
+                tag = (latest.get("tag_name") or "").lstrip("vV")
+                exe_asset = None
+                for asset in latest.get("assets", []):
+                    name = asset.get("name", "")
+                    if name.lower().endswith(".exe"):
+                        exe_asset = asset
+                        break
+                if tag and exe_asset and exe_asset.get("browser_download_url"):
+                    body = (latest.get("body") or "").strip()
+                    return {
+                        "version": tag,
+                        "url": exe_asset["browser_download_url"],
+                        "sha256": "",
+                        "notes": body,
+                    }
+        except Exception:
+            log.exception("_fetch_beta_release_info: API path failed; falling back to raw")
+
         cache_bust_url = f"{BETA_UPDATE_INFO_URL}?t={int(datetime.now().timestamp())}"
         request = urllib.request.Request(
             cache_bust_url,
