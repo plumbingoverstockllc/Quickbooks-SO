@@ -18,6 +18,11 @@ log = logging.getLogger("qb_so_app.quickbooks")
 
 _QB_PROCESS_NAMES = ("qbw32.exe", "qbw64.exe", "qbw.exe")
 
+# Sales order numbers below this are known-historical and never the "next".
+# Used as a FromRefNumber filter so the SalesOrderQuery only paginates the
+# tail of the table instead of the entire history.
+MIN_SALES_ORDER_NUMBER = "168250"
+
 
 def _is_quickbooks_running() -> bool:
     """Return True if a QuickBooks Desktop process is visible to this Windows session.
@@ -419,12 +424,24 @@ class QuickBooksClient:
             iterator_id_attr = f' iteratorID="{iterator_id}"' if iterator_id else ""
             # MaxReturned=1000 reduces COM round-trips over network shares. The
             # SDK clamps to its internal max if a smaller value applies.
+            # RefNumberRangeFilter with FromRefNumber=MIN_SALES_ORDER_NUMBER
+            # skips the long historical tail. RefNumber comparisons in QBXML
+            # are lexicographic, which is fine here because ref numbers in this
+            # company file are fixed-width numeric strings.
+            # The filter is only valid on the initial request — once iterating
+            # with iterator="Continue", QB rejects re-specified filters.
+            filter_xml = (
+                f"<RefNumberRangeFilter><FromRefNumber>{MIN_SALES_ORDER_NUMBER}</FromRefNumber></RefNumberRangeFilter>"
+                if iterator == "Start"
+                else ""
+            )
             query_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
     <SalesOrderQueryRq{iterator_attr}{iterator_id_attr}>
       <MaxReturned>1000</MaxReturned>
+      {filter_xml}
       <IncludeRetElement>RefNumber</IncludeRetElement>
     </SalesOrderQueryRq>
   </QBXMLMsgsRq>
@@ -466,12 +483,15 @@ class QuickBooksClient:
             refs = self._query_ref_numbers()
             numeric_values = []
             for ref in refs:
-                match = re.fullmatch(r"\d+", ref)
-                if match:
+                if re.fullmatch(r"\d+", ref):
                     numeric_values.append(int(ref))
+            # _query_ref_numbers is filtered to RefNumber >= MIN_SALES_ORDER_NUMBER,
+            # so when nothing matches we start the count there rather than at 1.
+            min_floor = int(MIN_SALES_ORDER_NUMBER)
             if not numeric_values:
-                return "1"
-            return str(max(numeric_values) + 1)
+                return str(min_floor)
+            highest = max(numeric_values)
+            return str(max(highest, min_floor - 1) + 1)
         finally:
             self.close()
 
