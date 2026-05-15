@@ -188,6 +188,35 @@ def _normalize_company_path(path: str) -> str:
     return normalized
 
 
+def _to_qb_date(date_text: str) -> str:
+    """Convert a user-entered or display date to QBXML's YYYY-MM-DD format.
+
+    QBXML's DATETYPE requires ISO-8601 dates. Common user formats (MM/DD/YYYY,
+    MM-DD-YYYY, M/D/YY, etc.) need to be normalized before being inserted into
+    the request XML, otherwise QuickBooks rejects the whole payload with
+    -2147220480 "QuickBooks found an error when parsing the provided XML
+    text stream."
+    """
+    text = (date_text or "").strip()
+    if not text:
+        return ""
+    from datetime import datetime
+    for fmt in (
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%m/%d/%y",
+        "%m-%d-%Y",
+        "%m-%d-%y",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+    ):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return text  # Fall through; QB will return a date-format error if invalid.
+
+
 class QuickBooksClient:
     def __init__(self, app_name: str = "SO Desktop App", company_file_path: str = "") -> None:
         self.app_name = app_name
@@ -477,25 +506,62 @@ class QuickBooksClient:
       </SalesOrderLineAdd>"""
                 )
 
+            # QBXML schema requires SalesOrderAdd children in a strict order:
+            # CustomerRef, ClassRef, ARAccountRef, TemplateRef, TxnDate,
+            # RefNumber, BillAddress, ShipAddress, PONumber, TermsRef, DueDate,
+            # SalesRep, FOB, ShipDate, ShipMethodRef, IsManuallyClosed, Memo,
+            # ..., SalesOrderLineAdd. Out-of-order children cause QB to return
+            # -2147220480 "QuickBooks found an error when parsing the provided
+            # XML text stream." Build the optional ones conditionally so empty
+            # fields don't ship as empty elements (also a schema risk).
+            txn_date_iso = _to_qb_date(txn_date)
+            due_date_iso = _to_qb_date(due_date)
+            log.debug(
+                "upload_sales_order: customer=%r so=%r txn=%s due=%s terms=%r ship=%r tax=%r lines=%d",
+                customer_name,
+                sales_order_no,
+                txn_date_iso,
+                due_date_iso,
+                terms,
+                shipping_method,
+                tax_code,
+                len(line_xml),
+            )
+            parts: list[str] = [
+                f"<CustomerRef><FullName>{html.escape(customer_name)}</FullName></CustomerRef>",
+            ]
+            if txn_date_iso:
+                parts.append(f"<TxnDate>{txn_date_iso}</TxnDate>")
+            parts.append(f"<RefNumber>{html.escape(sales_order_no)}</RefNumber>")
+            if terms:
+                parts.append(f"<TermsRef><FullName>{html.escape(terms)}</FullName></TermsRef>")
+            if due_date_iso:
+                parts.append(f"<DueDate>{due_date_iso}</DueDate>")
+            if shipping_method:
+                parts.append(f"<ShipMethodRef><FullName>{html.escape(shipping_method)}</FullName></ShipMethodRef>")
+            if memo:
+                parts.append(f"<Memo>{html.escape(memo)}</Memo>")
+            parts.append("".join(line_xml))
+
             request_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
     <SalesOrderAddRq>
       <SalesOrderAdd>
-        <CustomerRef><FullName>{html.escape(customer_name)}</FullName></CustomerRef>
-        <RefNumber>{html.escape(sales_order_no)}</RefNumber>
-        <TxnDate>{html.escape(txn_date)}</TxnDate>
-        <DueDate>{html.escape(due_date)}</DueDate>
-        <TermsRef><FullName>{html.escape(terms)}</FullName></TermsRef>
-        <ShipMethodRef><FullName>{html.escape(shipping_method)}</FullName></ShipMethodRef>
-        <Memo>{html.escape(memo)}</Memo>
-        {''.join(line_xml)}
+        {''.join(parts)}
       </SalesOrderAdd>
     </SalesOrderAddRq>
   </QBXMLMsgsRq>
 </QBXML>"""
-            response = self._process(request_xml)
+            try:
+                response = self._process(request_xml)
+            except Exception:
+                # Surface the XML we attempted to send so the log shows exactly
+                # what the SDK rejected. Bounded length to keep the log readable.
+                preview = request_xml if len(request_xml) <= 8000 else request_xml[:8000] + "\n... [truncated]"
+                log.error("upload_sales_order: ProcessRequest raised; XML sent (preview):\n%s", preview)
+                raise
             root = ET.fromstring(response)
             add_rs = root.find(".//SalesOrderAddRs")
             if add_rs is None:
