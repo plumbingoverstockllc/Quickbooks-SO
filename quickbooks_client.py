@@ -492,6 +492,149 @@ class QuickBooksClient:
         finally:
             self.close()
 
+    def _customer_has_default_tax_item(self, customer_name: str) -> tuple[bool, str]:
+        """Check whether a customer already has a default ItemSalesTaxRef.
+
+        Returns (has_default, edit_sequence). edit_sequence is needed if a
+        CustomerMod is required afterwards. has_default is True when the
+        customer record already has any tax item attached, so we don't
+        clobber it.
+        """
+        name = _clean(customer_name)
+        if not name:
+            return False, ""
+        query_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <CustomerQueryRq>
+      <FullName>{name}</FullName>
+      <IncludeRetElement>ListID</IncludeRetElement>
+      <IncludeRetElement>EditSequence</IncludeRetElement>
+      <IncludeRetElement>ItemSalesTaxRef</IncludeRetElement>
+    </CustomerQueryRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(query_xml)
+        except Exception:
+            log.exception("_customer_has_default_tax_item: query failed for %r", customer_name)
+            return False, ""
+        try:
+            root = ET.fromstring(response)
+        except ET.ParseError:
+            log.exception("_customer_has_default_tax_item: bad response XML")
+            return False, ""
+        cust = root.find(".//CustomerRet")
+        if cust is None:
+            return False, ""
+        edit_seq = cust.findtext("EditSequence", default="")
+        tax_full = cust.findtext("ItemSalesTaxRef/FullName", default="").strip()
+        return bool(tax_full), edit_seq
+
+    def _set_customer_default_tax_item(
+        self,
+        customer_name: str,
+        edit_sequence: str,
+        tax_item: str,
+    ) -> tuple[bool, str]:
+        """CustomerMod: set the customer's default ItemSalesTaxRef.
+
+        Returns (ok, message). The caller is expected to have already
+        confirmed that no default is set, via _customer_has_default_tax_item.
+        """
+        name = _clean(customer_name)
+        seq = _clean(edit_sequence)
+        item = _clean(tax_item)
+        if not name or not seq or not item:
+            return False, "missing customer name, edit sequence, or tax item"
+        # CustomerModRq requires the EditSequence on the immediate child.
+        # We use ListID-less FullName lookup; QB resolves the customer via
+        # FullName + EditSequence.
+        # Find the customer's ListID first; CustomerMod requires it.
+        list_id_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <CustomerQueryRq>
+      <FullName>{name}</FullName>
+      <IncludeRetElement>ListID</IncludeRetElement>
+    </CustomerQueryRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(list_id_xml)
+            list_id = ET.fromstring(response).findtext(".//CustomerRet/ListID", default="").strip()
+        except Exception:
+            log.exception("_set_customer_default_tax_item: ListID lookup failed")
+            return False, "could not look up customer ListID"
+        if not list_id:
+            return False, "customer not found"
+        mod_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <CustomerModRq>
+      <CustomerMod>
+        <ListID>{list_id}</ListID>
+        <EditSequence>{seq}</EditSequence>
+        <ItemSalesTaxRef><FullName>{item}</FullName></ItemSalesTaxRef>
+      </CustomerMod>
+    </CustomerModRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(mod_xml)
+        except Exception as exc:
+            log.exception("_set_customer_default_tax_item: ProcessRequest raised")
+            return False, f"SDK error: {exc}"
+        try:
+            root = ET.fromstring(response)
+        except ET.ParseError as exc:
+            return False, f"bad response XML: {exc}"
+        rs = root.find(".//CustomerModRs")
+        if rs is None:
+            return False, "no CustomerModRs in response"
+        status_code = rs.attrib.get("statusCode", "")
+        status_message = rs.attrib.get("statusMessage", "")
+        if status_code != "0":
+            return False, f"{status_code}: {status_message}"
+        return True, "ok"
+
+    def _ensure_customer_tax_item(self, customer_name: str, tax_item: str) -> None:
+        """If `customer_name` has no default ItemSalesTaxRef, set it to
+        `tax_item`. Best-effort: failures are logged but not raised, so the
+        sales-order upload still gets attempted. The caller (upload_sales_order)
+        will surface QB's 3180 error if it ultimately matters.
+        """
+        if not customer_name or not tax_item:
+            return
+        has_default, edit_seq = self._customer_has_default_tax_item(customer_name)
+        if has_default:
+            log.debug(
+                "_ensure_customer_tax_item: %r already has a default tax item, leaving alone",
+                customer_name,
+            )
+            return
+        if not edit_seq:
+            log.warning(
+                "_ensure_customer_tax_item: could not get EditSequence for %r; skipping CustomerMod",
+                customer_name,
+            )
+            return
+        log.info(
+            "_ensure_customer_tax_item: setting %r default ItemSalesTaxRef to %r",
+            customer_name,
+            tax_item,
+        )
+        ok, msg = self._set_customer_default_tax_item(customer_name, edit_seq, tax_item)
+        if not ok:
+            log.warning(
+                "_ensure_customer_tax_item: CustomerMod failed for %r: %s",
+                customer_name,
+                msg,
+            )
+
     def _query_existing_items(self, skus: Iterable[str]) -> set[str]:
         """Return the subset of `skus` that exist in the QuickBooks Item list.
 
@@ -631,6 +774,14 @@ class QuickBooksClient:
         self.last_created_items = []
         self.connect()
         try:
+            # Make sure the customer has a default sales-tax item so the
+            # SalesOrderAdd doesn't trip QB error 3180 ("Transaction Sales
+            # Tax field cannot be left blank"). QBXML 13.0 doesn't allow an
+            # ItemSalesTaxRef directly on SalesOrderAdd, so we set it on the
+            # customer instead. Best-effort -- logged failures don't block
+            # the upload attempt.
+            if sales_tax_item:
+                self._ensure_customer_tax_item(customer_name, sales_tax_item)
             def _clean(text: str) -> str:
                 """Make a string safe for QBXML element content.
 
@@ -909,16 +1060,11 @@ class QuickBooksClient:
                 parts.append(
                     f"<CustomerSalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></CustomerSalesTaxCodeRef>"
                 )
-            # ItemSalesTaxRef is the *rate* (e.g. "CA Tax 9.75%" or "Out of
-            # State 0%"). Some QuickBooks files reject the SalesOrderAdd with
-            # error 3180 "The Transaction Sales Tax field cannot be left
-            # blank, even for non-taxable customers..." when this is missing,
-            # so we emit it whenever the user has configured a Sales Tax Item
-            # in the Configuration card.
-            if sales_tax_item:
-                parts.append(
-                    f"<ItemSalesTaxRef><FullName>{_clean(sales_tax_item)}</FullName></ItemSalesTaxRef>"
-                )
+            # Note: ItemSalesTaxRef is NOT a valid child of SalesOrderAdd in
+            # QBXML 13.0 -- emitting it here triggers a parse error
+            # (-2147220480). The header tax rate is instead inherited from
+            # the customer's default tax item, which we ensure is set via
+            # _ensure_customer_tax_item() above before this XML is built.
             parts.append("".join(line_xml))
 
             # Intentionally NO encoding="..." on the XML declaration.

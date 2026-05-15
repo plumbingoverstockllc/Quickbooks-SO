@@ -1,6 +1,6 @@
 {
-  "version": "1.005",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.005/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "ebbf3fe1902f47aabbcb5ec51dca5393c96151b5499ab1d2c4ecc2be24cb2be3",
-  "notes": "Sales orders now always use 'CA Tax' as the Sales Tax Item, set automatically on every upload. The Sales Tax Item field added in v1.004 has been removed."
+  "version": "1.006",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.006/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "77bc7ef1439013af879f480f03ba2344a2b8e93cf5cdf90b4f0e3a817d39d567",
+  "notes": "Fixes the 'Transaction Sales Tax field cannot be left blank' error for customers that don't have a default tax rate set. Before each upload the app now checks the customer in QuickBooks and, if no default sales tax item is on file, sets it to CA Tax automatically. Customers that already have a tax item are left untouched."
 }
