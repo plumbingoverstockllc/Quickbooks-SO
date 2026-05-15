@@ -1,6 +1,6 @@
 {
-  "version": "1.011",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.011/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "c03f0eb8e469ac134557be83a46ec7c223ac86c06220f65e2d783814a0949c5b",
-  "notes": "No separate beta build in flight right now. This entry points to the stable release."
+  "version": "1.012b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.012b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "f865122d326141bf32435a262a8b9cbbea2aaa678e8076ca39e1581ab74436b7",
+  "notes": "UI overhaul. Source File and Output File now sit side-by-side, the QB Company File and SaaSant Template rows are gone. Customer, Sales Order No, Fetch button, and Terms are smaller. Sales Order Date and Due Date each have a calendar popup. Memo and Fallback Item fields removed. Every button now has a visible outline and a soft shadow edge. The preview pane gets the reclaimed vertical space."
 }

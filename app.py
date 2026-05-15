@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.011"
+APP_VERSION = "v1.012b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -666,11 +666,11 @@ class SalesOrderApp:
             background=c["accent"],
             foreground="#FFFFFF",
             bordercolor=c["accent_dark"],
-            lightcolor=c["accent_light"],
+            lightcolor=c["accent"],
             darkcolor=c["accent_dark"],
-            borderwidth=1,
+            borderwidth=2,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Primary.TButton",
@@ -695,18 +695,24 @@ class SalesOrderApp:
             ],
         )
 
+        # v1.012b: all buttons get a visible outline + a shadow-style edge.
+        # In the clam theme, relief="raised" with borderwidth=2 draws
+        # lightcolor on the top/left of the rim and darkcolor on the
+        # bottom/right. Setting lightcolor close to the button background
+        # (so the top is "invisible") and darkcolor to a clearly darker
+        # shade gives the effect of a drop shadow underneath the button.
         self.style.configure(
             "Accent.TButton",
-            padding=(16, 8),
+            padding=(16, 9),
             font=("Segoe UI Semibold", 10),
             background=c["bg_card"],
             foreground=c["accent"],
             bordercolor=c["accent"],
-            lightcolor=c["btn_light_top"],
-            darkcolor=c["accent_bg"],
-            borderwidth=1,
+            lightcolor=c["bg_card"],
+            darkcolor=c["accent"],
+            borderwidth=2,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Accent.TButton",
@@ -720,7 +726,7 @@ class SalesOrderApp:
                 ("active", c["accent_hover"]),
                 ("disabled", c["text_tertiary"]),
             ],
-            relief=[("pressed", "flat")],
+            relief=[("pressed", "sunken")],
             bordercolor=[
                 ("pressed", c["accent_dark"]),
                 ("active", c["accent_light"]),
@@ -730,16 +736,16 @@ class SalesOrderApp:
 
         self.style.configure(
             "Quiet.TButton",
-            padding=(14, 8),
+            padding=(14, 9),
             font=("Segoe UI", 10),
             background=c["bg_card"],
             foreground=c["text_primary"],
-            bordercolor=c["btn_light_border"],
-            lightcolor=c["btn_light_top"],
-            darkcolor=c["btn_light_bottom"],
-            borderwidth=1,
+            bordercolor=c["border_strong"],
+            lightcolor=c["bg_card"],
+            darkcolor=c["border_strong"],
+            borderwidth=2,
             focusthickness=0,
-            relief="flat",
+            relief="raised",
         )
         self.style.map(
             "Quiet.TButton",
@@ -748,7 +754,7 @@ class SalesOrderApp:
                 ("active", c["bg_hover"]),
             ],
             foreground=[("disabled", c["text_tertiary"])],
-            relief=[("pressed", "flat")],
+            relief=[("pressed", "sunken")],
             bordercolor=[("active", c["accent_light"]), ("pressed", c["accent"])],
         )
 
@@ -1509,62 +1515,53 @@ class SalesOrderApp:
         ).pack(anchor="w", pady=(6, 0))
 
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
-        config.pack(fill="x", padx=32, pady=(4, 10))
+        config.pack(fill="x", padx=32, pady=(4, 8))
 
-        self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
-        self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
-        self._path_row(config, "Output File", self.output_path_var, self._browse_output, 2)
-        self._path_row(config, "QB Company File (.QBW)", self.qb_company_file_var, self._browse_qb_company_file, 3)
+        # Source File and Output File side-by-side. SaaSant Template and
+        # QB Company File path rows were removed in v1.012 -- the template
+        # path was only relevant for an old export shape; the QBW path is
+        # unused now that connect attaches to a running QuickBooks instead
+        # of opening a file. The vars stay so existing settings.json entries
+        # load without complaining.
+        paths_row = ttk.Frame(config, style="Card.TFrame")
+        paths_row.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 4))
+        paths_row.columnconfigure(0, weight=1, uniform="paths")
+        paths_row.columnconfigure(1, weight=1, uniform="paths")
+        src_cell = ttk.Frame(paths_row, style="Card.TFrame")
+        src_cell.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._path_row_inline(src_cell, "Source File", self.source_path_var, self._browse_source)
+        out_cell = ttk.Frame(paths_row, style="Card.TFrame")
+        out_cell.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        self._path_row_inline(out_cell, "Output File", self.output_path_var, self._browse_output)
 
         form = ttk.Frame(config, style="Card.TFrame")
-        form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        for i in range(6):
+        form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
+        # 12 columns gives finer width control over the smaller fields.
+        for i in range(12):
             form.columnconfigure(i, weight=1)
 
-        self._form_entry(form, "Customer", self.customer_var, 0, 0, 2)
-        self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 2, 1)
-        ttk.Button(form, text="Fetch Next from QuickBooks", command=self.fetch_next_so, style="Quiet.TButton").grid(
-            row=1, column=3, padx=4, sticky="ew"
-        )
-        self._form_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 4, 1)
-        self._form_entry(form, "Due Date", self.due_date_var, 0, 5, 1)
-        ttk.Label(
+        # Row 0/1: Customer (narrow), Sales Order No (narrow), Fetch button
+        # (compact), Sales Order Date + picker, Due Date + picker.
+        self._form_entry(form, "Customer", self.customer_var, 0, 0, 3)
+        self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 3, 2)
+        ttk.Button(
             form,
-            text="Date format: MM/DD/YYYY (example: 05/12/2026)",
-            style="CardSubHeader.TLabel",
-        ).grid(row=2, column=4, columnspan=2, sticky="w", padx=4, pady=(0, 2))
+            text="Fetch Next",
+            command=self.fetch_next_so,
+            style="Quiet.TButton",
+        ).grid(row=1, column=5, padx=4, sticky="ew")
+        self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 6, 3)
+        self._date_entry(form, "Due Date", self.due_date_var, 0, 9, 3)
 
-        self._form_entry(form, "Terms", self.terms_var, 3, 0, 1)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 1, 1)
-        self._form_entry(form, "Memo", self.memo_var, 3, 2, 2)
-        self._form_entry(form, "Currency", self.currency_var, 3, 4, 1)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 5, 1)
-
-        self._form_entry(
-            form,
-            "Default Income Account (auto-creates missing SKUs under this account)",
-            self.income_account_var,
-            5,
-            0,
-            3,
-        )
-        self._form_entry(
-            form,
-            "Fallback Item (used only if Default Income Account is empty)",
-            self.fallback_item_var,
-            5,
-            3,
-            3,
-        )
-        # Room grouping is always on in v1.002+. The source file's column L
-        # is read as the room name and the QuickBooks upload inserts a
-        # **ROOM** header line plus blank separators between groups. The
-        # room_grouping_var stays defined for settings backward-compatibility
-        # but is no longer surfaced as a checkbox.
-
-        # Sales Tax Item is hard-coded to "CA Tax" in upload_to_quickbooks
-        # (v1.005+). The sales_tax_item_var stays defined for settings
-        # backward-compatibility but is no longer surfaced as a field.
+        # Row 3/4: Terms (narrow), Shipping Method, Currency, Tax Code.
+        # Memo removed in v1.012.
+        self._form_entry(form, "Terms", self.terms_var, 3, 0, 2)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 2, 3)
+        self._form_entry(form, "Currency", self.currency_var, 3, 5, 2)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 7, 2)
+        # Default Income Account stays visible; Fallback Item removed in
+        # v1.012 (income-account auto-create is the only recovery path now).
+        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 9, 3)
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -1737,13 +1734,152 @@ class SalesOrderApp:
         )
         parent.columnconfigure(1, weight=1)
 
+    def _path_row_inline(self, parent, label, var, browse_cmd):
+        """Compact path row used when two paths share a horizontal slot.
+
+        Layout: [Label][Entry stretches][Browse]
+        """
+        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(2, 1)
+        )
+        ttk.Entry(parent, textvariable=var).grid(
+            row=1, column=0, sticky="ew", padx=(4, 6), pady=(0, 2)
+        )
+        ttk.Button(parent, text="Browse", command=browse_cmd, style="Quiet.TButton").grid(
+            row=1, column=1, sticky="e", padx=(0, 4), pady=(0, 2)
+        )
+        parent.columnconfigure(0, weight=1)
+
     def _form_entry(self, parent, label, var, row, col, span):
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
-            row=row, column=col, sticky="w", padx=4, pady=(4, 1)
+            row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
         )
         ttk.Entry(parent, textvariable=var).grid(
             row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
+
+    def _date_entry(self, parent, label, var, row, col, span):
+        """Form entry like _form_entry but with a small 📅 picker button on
+        the right that opens a calendar popup and fills the entry."""
+        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
+            row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
+        )
+        wrap = ttk.Frame(parent, style="Card.TFrame")
+        wrap.grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4))
+        wrap.columnconfigure(0, weight=1)
+        ttk.Entry(wrap, textvariable=var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(
+            wrap,
+            text="📅",
+            width=3,
+            command=lambda v=var: self._open_date_picker(v),
+            style="Quiet.TButton",
+        ).grid(row=0, column=1, sticky="e", padx=(4, 0))
+
+    def _open_date_picker(self, var: tk.StringVar) -> None:
+        """Tiny calendar popup. Reads the current value to seed the month,
+        renders day buttons, and on click writes MM/DD/YYYY back into var."""
+        c = UI
+        try:
+            seed = datetime.strptime(var.get().strip(), "%m/%d/%Y")
+        except Exception:
+            seed = datetime.now()
+        state = {"year": seed.year, "month": seed.month}
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Pick a date")
+        dlg.configure(bg=c["bg_window"])
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        accent = tk.Frame(dlg, bg=c["accent"], height=3)
+        accent.pack(fill="x")
+
+        outer = tk.Frame(dlg, bg=c["bg_window"])
+        outer.pack(padx=14, pady=12)
+
+        nav = tk.Frame(outer, bg=c["bg_window"])
+        nav.pack(fill="x")
+        title_var = tk.StringVar()
+        title_label = tk.Label(
+            nav,
+            textvariable=title_var,
+            bg=c["bg_window"],
+            fg=c["text_primary"],
+            font=("Segoe UI Semibold", 12),
+            width=18,
+        )
+
+        grid_frame = tk.Frame(outer, bg=c["bg_window"])
+        grid_frame.pack(pady=(8, 0))
+
+        def render():
+            import calendar
+            for child in grid_frame.winfo_children():
+                child.destroy()
+            year, month = state["year"], state["month"]
+            title_var.set(datetime(year, month, 1).strftime("%B %Y"))
+            for i, name in enumerate(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]):
+                tk.Label(
+                    grid_frame, text=name, bg=c["bg_window"], fg=c["text_secondary"],
+                    font=("Segoe UI", 9), width=4,
+                ).grid(row=0, column=i, padx=1, pady=1)
+            cal = calendar.Calendar(firstweekday=0)
+            today = datetime.now().date()
+            for r, week in enumerate(cal.monthdatescalendar(year, month), start=1):
+                for c_idx, day in enumerate(week):
+                    in_month = (day.month == month)
+                    is_today = (day == today)
+                    label_fg = c["text_primary"] if in_month else c["text_tertiary"]
+                    bg = c["accent_bg"] if is_today and in_month else c["bg_card"]
+                    btn = tk.Button(
+                        grid_frame,
+                        text=str(day.day),
+                        width=4,
+                        bg=bg,
+                        fg=label_fg,
+                        relief="flat",
+                        bd=0,
+                        font=("Segoe UI", 9, "bold" if is_today else "normal"),
+                        activebackground=c["accent"],
+                        activeforeground="#FFFFFF",
+                        command=lambda d=day: pick(d),
+                    )
+                    btn.grid(row=r, column=c_idx, padx=1, pady=1, sticky="nsew")
+
+        def pick(day):
+            var.set(day.strftime("%m/%d/%Y"))
+            dlg.destroy()
+
+        def shift(delta):
+            m = state["month"] + delta
+            y = state["year"]
+            while m < 1:
+                m += 12; y -= 1
+            while m > 12:
+                m -= 12; y += 1
+            state["month"] = m; state["year"] = y
+            render()
+
+        ttk.Button(nav, text="◀", width=3, command=lambda: shift(-1), style="Quiet.TButton").pack(side="left")
+        title_label.pack(side="left", padx=8)
+        ttk.Button(nav, text="▶", width=3, command=lambda: shift(1), style="Quiet.TButton").pack(side="left")
+        ttk.Button(nav, text="Today", command=lambda: pick(datetime.now().date()), style="Quiet.TButton").pack(
+            side="right"
+        )
+
+        render()
+
+        dlg.update_idletasks()
+        try:
+            self.root.update_idletasks()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            dw, dh = dlg.winfo_width(), dlg.winfo_height()
+            dlg.geometry(f"+{rx + (rw - dw) // 2}+{ry + (rh - dh) // 2}")
+        except tk.TclError:
+            pass
 
     def _tree_values_from_row(self, row, row_index: int | None = None) -> tuple:
         values = []
