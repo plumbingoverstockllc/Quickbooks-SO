@@ -1,6 +1,6 @@
 {
-  "version": "1.002",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "df37fb9ed947e0fdff5b13c30eb1283c25a91c2fbb0eaa7e9926ac8dbf98989e",
-  "notes": "Room grouping graduated to stable v1.002 — no separate beta build is in flight right now. This entry points to the stable release."
+  "version": "1.003",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.003/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "21c7ab03302070a8a0fc79bb9cfe4f1806ca4224231fd3019350a5e8db1465dd",
+  "notes": "No separate beta build in flight right now. This entry points to the stable release."
 }

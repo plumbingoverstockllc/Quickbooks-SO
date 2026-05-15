@@ -1,6 +1,6 @@
 {
-  "version": "1.002",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "df37fb9ed947e0fdff5b13c30eb1283c25a91c2fbb0eaa7e9926ac8dbf98989e",
-  "notes": "Sales orders are now organized by room. The QuickBooks upload reads column L of the source file and adds a header line (**ROOM**) before each section with blank rows between, so the resulting order is grouped the way you build it. After upload, you also get a report listing any items the app had to create in QuickBooks during the run."
+  "version": "1.003",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.003/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "21c7ab03302070a8a0fc79bb9cfe4f1806ca4224231fd3019350a5e8db1465dd",
+  "notes": "Uploaded sales orders now set the order-level tax code automatically, so the header Tax field is filled in instead of defaulting to None. No more flipping it manually after each upload."
 }

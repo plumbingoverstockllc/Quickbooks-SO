@@ -899,6 +899,15 @@ class QuickBooksClient:
                 parts.append(f"<ShipMethodRef><FullName>{_clean(shipping_method)}</FullName></ShipMethodRef>")
             if memo:
                 parts.append(f"<Memo>{_clean(memo)}</Memo>")
+            # CustomerSalesTaxCodeRef sets the header-level "Tax" code on the
+            # sales order so QuickBooks doesn't default it to None. The line-
+            # level SalesTaxCodeRef on each SalesOrderLineAdd marks the line
+            # as taxable; without the header code, QB still treats the order
+            # as non-taxable and the user has to flip it manually.
+            if tax_code:
+                parts.append(
+                    f"<CustomerSalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></CustomerSalesTaxCodeRef>"
+                )
             parts.append("".join(line_xml))
 
             # Intentionally NO encoding="..." on the XML declaration.
