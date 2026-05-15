@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.013b"
+APP_VERSION = "v1.014b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -768,6 +768,31 @@ class SalesOrderApp:
             borderwidth=2,
             focusthickness=0,
             relief="raised",
+        )
+
+        # Green/Success button for "commit" actions like Upload to QuickBooks.
+        self.style.configure(
+            "Success.TButton",
+            padding=(20, 10),
+            font=("Segoe UI Semibold", 10),
+            background=c["success"],
+            foreground="#FFFFFF",
+            bordercolor=c["success"],
+            lightcolor=c["success"],
+            darkcolor="#0E5E2C",
+            borderwidth=2,
+            focusthickness=0,
+            relief="raised",
+        )
+        self.style.map(
+            "Success.TButton",
+            background=[
+                ("pressed", "#0E5E2C"),
+                ("active", "#127039"),
+                ("disabled", c["border_strong"]),
+            ],
+            foreground=[("disabled", c["bg_card"])],
+            relief=[("pressed", "sunken")],
         )
         self.style.map(
             "Quiet.TButton",
@@ -1541,7 +1566,10 @@ class SalesOrderApp:
         root = self.root
         c = UI
 
-        accent_strip = tk.Frame(root, bg=c["accent"], height=4)
+        # Beta builds get an orange strip up top so the build channel is
+        # visible at a glance; stable builds keep the blue accent.
+        strip_color = c["warning"] if IS_BETA else c["accent"]
+        accent_strip = tk.Frame(root, bg=strip_color, height=4)
         accent_strip.pack(fill="x", side="top")
 
         header = ttk.Frame(root, padding=(32, 22, 32, 16))
@@ -1557,6 +1585,49 @@ class SalesOrderApp:
 
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
         config.pack(fill="x", padx=32, pady=(4, 8))
+        # Two columns: form fields on the left, validation messages on the
+        # right. Weighted so the left side gets ~2/3 of the width and the
+        # validation panel takes the remaining ~1/3.
+        config.columnconfigure(0, weight=3, uniform="cfg")
+        config.columnconfigure(1, weight=2, uniform="cfg")
+
+        config_left = ttk.Frame(config, style="Card.TFrame")
+        config_left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+
+        config_right = ttk.Frame(config, style="Card.TFrame")
+        config_right.grid(row=0, column=1, sticky="nsew")
+        config_right.rowconfigure(1, weight=1)
+        config_right.columnconfigure(0, weight=1)
+        ttk.Label(
+            config_right,
+            text="Validation Messages",
+            style="FieldLabel.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=4, pady=(2, 4))
+        error_wrap = tk.Frame(
+            config_right,
+            bg=c["bg_card"],
+            highlightbackground=c["border"],
+            highlightthickness=1,
+            bd=0,
+        )
+        error_wrap.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 4))
+        self.error_text = tk.Text(
+            error_wrap,
+            wrap="word",
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            insertbackground=c["text_primary"],
+            selectbackground=c["accent_bg"],
+            selectforeground=c["text_primary"],
+            borderwidth=0,
+            highlightthickness=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+            padx=6,
+            pady=6,
+            height=12,
+        )
+        self.error_text.pack(fill="both", expand=True)
 
         # Source File and Output File side-by-side. SaaSant Template and
         # QB Company File path rows were removed in v1.012 -- the template
@@ -1564,7 +1635,7 @@ class SalesOrderApp:
         # unused now that connect attaches to a running QuickBooks instead
         # of opening a file. The vars stay so existing settings.json entries
         # load without complaining.
-        paths_row = ttk.Frame(config, style="Card.TFrame")
+        paths_row = ttk.Frame(config_left, style="Card.TFrame")
         paths_row.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 4))
         paths_row.columnconfigure(0, weight=1, uniform="paths")
         paths_row.columnconfigure(1, weight=1, uniform="paths")
@@ -1575,7 +1646,7 @@ class SalesOrderApp:
         out_cell.grid(row=0, column=1, sticky="ew", padx=(8, 0))
         self._path_row_inline(out_cell, "Output File", self.output_path_var, self._browse_output)
 
-        form = ttk.Frame(config, style="Card.TFrame")
+        form = ttk.Frame(config_left, style="Card.TFrame")
         form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         # 12 columns gives finer width control over the smaller fields.
         for i in range(12):
@@ -1619,7 +1690,7 @@ class SalesOrderApp:
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and
         # Help menus in v1.013b.
-        qb_bar = ttk.Frame(config, style="Card.TFrame")
+        qb_bar = ttk.Frame(config_left, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.qb_status_pill = tk.Frame(
             qb_bar,
@@ -1656,7 +1727,7 @@ class SalesOrderApp:
             actions,
             text="Upload to QuickBooks",
             command=self.upload_to_quickbooks,
-            style="Accent.TButton",
+            style="Success.TButton",
         ).pack(side="left", padx=(8, 0))
 
         content = ttk.Panedwindow(root, orient="vertical")
@@ -1726,25 +1797,9 @@ class SalesOrderApp:
         src_scroll_x.grid(row=1, column=0, sticky="ew")
         self.source_tree.bind("<Double-1>", self._edit_source_row)
 
-        error_frame = ttk.LabelFrame(content, text="  Validation Messages  ", style="Card.TLabelframe")
-        content.add(error_frame, weight=1)
-        self.error_text = tk.Text(
-            error_frame,
-            height=3,
-            wrap="word",
-            bg=c["bg_card"],
-            fg=c["text_primary"],
-            insertbackground=c["text_primary"],
-            selectbackground=c["accent_bg"],
-            selectforeground=c["text_primary"],
-            borderwidth=0,
-            highlightthickness=0,
-            relief="flat",
-            font=("Segoe UI", 10),
-            padx=4,
-            pady=4,
-        )
-        self.error_text.pack(fill="both", expand=True)
+        # Validation Messages now lives on the right side of the
+        # Configuration card (see config_right above). The old bottom panel
+        # was removed in v1.014b.
 
         status_bar = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
         status_bar.pack(fill="x", side="bottom")

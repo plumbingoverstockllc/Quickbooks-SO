@@ -1,6 +1,6 @@
 {
-  "version": "1.013b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.013b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "b0048b997f007935c8d0db2d1b9483c452338e41ecd5e0429950c31632cbfab8",
-  "notes": "New Setup menu in the menu bar holds Connect to QuickBooks Desktop, QuickBooks Admin Setup, Change Pricing Rules, and Export Template - those buttons no longer crowd the bottom of the window. Required fields (Customer, Sales Order No, Sales Order Date, Due Date) now light up red when you try to Build Preview or Upload while they're blank, and clear themselves the moment you type."
+  "version": "1.014b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.014b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "45f4bc886d648bf24a2fe15fdffe23cf7a10315f9255fb05584d9b25417096fa",
+  "notes": "Validation Messages now sit on the right side of the Configuration card instead of below the preview. The top strip is orange on beta builds and blue on stable so the channel is obvious at a glance. The Upload to QuickBooks button is now green."
 }
