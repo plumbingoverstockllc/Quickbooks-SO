@@ -383,20 +383,25 @@ class QuickBooksClient:
         ref_numbers: List[str] = []
         iterator = "Start"
         iterator_id = ""
+        page = 0
 
         while True:
             iterator_attr = f' iterator="{iterator}"'
             iterator_id_attr = f' iteratorID="{iterator_id}"' if iterator_id else ""
+            # MaxReturned=1000 reduces COM round-trips over network shares. The
+            # SDK clamps to its internal max if a smaller value applies.
             query_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
     <SalesOrderQueryRq{iterator_attr}{iterator_id_attr}>
-      <MaxReturned>200</MaxReturned>
+      <MaxReturned>1000</MaxReturned>
       <IncludeRetElement>RefNumber</IncludeRetElement>
     </SalesOrderQueryRq>
   </QBXMLMsgsRq>
 </QBXML>"""
+            page += 1
+            log.debug("_query_ref_numbers: requesting page %d (so far %d refs)", page, len(ref_numbers))
             response = self._process(query_xml)
             root = ET.fromstring(response)
 
@@ -406,15 +411,24 @@ class QuickBooksClient:
 
             query_rs = root.find(".//SalesOrderQueryRs")
             if query_rs is None:
+                log.debug("_query_ref_numbers: no QueryRs element on page %d; stopping", page)
                 break
             remaining = int(query_rs.attrib.get("iteratorRemainingCount", "0"))
+            log.debug(
+                "_query_ref_numbers: page %d returned %d total refs so far, %d remaining",
+                page,
+                len(ref_numbers),
+                remaining,
+            )
             if remaining <= 0:
                 break
             iterator = "Continue"
             iterator_id = query_rs.attrib.get("iteratorID", "")
             if not iterator_id:
+                log.debug("_query_ref_numbers: missing iteratorID on page %d; stopping", page)
                 break
 
+        log.info("_query_ref_numbers: completed, %d refs across %d page(s)", len(ref_numbers), page)
         return ref_numbers
 
     def get_next_sales_order_number(self) -> str:

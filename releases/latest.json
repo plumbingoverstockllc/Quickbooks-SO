@@ -1,6 +1,6 @@
 {
-  "version": "0.9.706",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.706/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "54a6252ef508febeb884e75f0fb1ccd4eb21bf6359462b4b4664f137f2564527",
-  "notes": "Uses a single safe mode-2 attach attempt, blocks Secondary-window states before BeginSession, and surfaces explicit QuickBooks host/network session-loss errors."
+  "version": "0.9.707",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.707/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "587a7a753330617db1423e3ce494138505200e909da9cf3c496c513256c821b9",
+  "notes": "Fetch Next from QuickBooks now runs on a background thread (no more UI freeze) and pages 1000 SalesOrders per request instead of 200. Auto-connect on startup is re-enabled automatically after the first successful manual Connect."
 }

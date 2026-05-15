@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.706 Beta"
+APP_VERSION = "v0.9.707 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -1430,18 +1430,36 @@ class SalesOrderApp:
 
     def fetch_next_so(self):
         log.info("Fetch Next SO: clicked. company_file_path=%r", self.qb_company_file_var.get().strip())
-        try:
-            next_no = self._qb_client().get_next_sales_order_number()
-            log.info("Fetch Next SO: success, next=%s", next_no)
-            self.sales_order_no_var.set(next_no)
-            self._set_status(f"Fetched next sales order number: {next_no}")
-            self._set_qb_status("Connected", state="connected")
-            messagebox.showinfo("Success", f"Next Sales Order number: {next_no}")
-        except Exception as exc:
-            log.error("Fetch Next SO: failed — %s", exc)
-            log.debug("Fetch Next SO traceback:\n%s", traceback.format_exc())
-            self._set_qb_status("Connection Failed", state="disconnected")
-            messagebox.showerror("QuickBooks Error", str(exc))
+        self._set_qb_status("Fetching next SO...", state="pending")
+        self._set_status("Fetching next Sales Order number from QuickBooks (this may take a moment)...")
+
+        client = self._qb_client()
+
+        def worker():
+            try:
+                next_no = client.get_next_sales_order_number()
+                log.info("Fetch Next SO: success, next=%s", next_no)
+                self.root.after(0, lambda: self._fetch_next_so_done(next_no))
+            except Exception as exc:
+                log.error("Fetch Next SO: failed — %s", exc)
+                log.debug("Fetch Next SO traceback:\n%s", traceback.format_exc())
+                self.root.after(0, lambda e=exc: self._fetch_next_so_failed(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _fetch_next_so_done(self, next_no: str) -> None:
+        self.sales_order_no_var.set(next_no)
+        self._set_status(f"Fetched next sales order number: {next_no}")
+        self._set_qb_status("Connected", state="connected")
+        messagebox.showinfo("Success", f"Next Sales Order number: {next_no}")
+
+    def _fetch_next_so_failed(self, exc: Exception) -> None:
+        self._set_qb_status("Connection Failed", state="disconnected")
+        self._set_status("Fetch Next SO failed. See the Log menu for details.")
+        messagebox.showerror(
+            "QuickBooks Error",
+            f"{exc}\n\nSee the Log menu for details (file: {LOG_PATH}).",
+        )
 
     def _connect_quickbooks_on_startup(self):
         log.info("Auto-connect on startup")
@@ -1459,6 +1477,15 @@ class SalesOrderApp:
             log.info("Connect QuickBooks: success, company=%r", company_name)
             self._set_qb_status(f"Connected: {company_name}", state="connected")
             self._set_status(f"Connected to QuickBooks company: {company_name}")
+            if not self.auto_connect_on_startup:
+                # First successful connect — remember it so future app launches
+                # auto-connect without the user clicking the button.
+                log.info("Connect QuickBooks: enabling auto-connect on future startups")
+                self.auto_connect_on_startup = True
+                try:
+                    self._persist_settings()
+                except Exception:
+                    log.exception("Connect QuickBooks: failed to persist auto-connect flag")
             if not silent:
                 messagebox.showinfo("QuickBooks Connected", f"Connected successfully.\nCompany: {company_name}")
         except Exception as exc:
