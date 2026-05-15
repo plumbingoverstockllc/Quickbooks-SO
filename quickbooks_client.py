@@ -621,6 +621,7 @@ class QuickBooksClient:
         tax_code: str,
         fallback_item: str = "",
         income_account: str = "",
+        group_by_room: bool = False,
     ) -> str:
         self.connect()
         try:
@@ -665,6 +666,7 @@ class QuickBooksClient:
                         "desc": _clean(line["Product/Service Description"]),
                         "qty": float(line["Product/Service Quantity"]),
                         "rate": float(line["Product/Service Rate"]),
+                        "room": str(line.get("Room", "") or "").strip() if isinstance(line, dict) else "",
                     })
                 except Exception as exc:
                     raise RuntimeError(
@@ -770,20 +772,15 @@ class QuickBooksClient:
                         "original SKU stamped into the line description."
                     )
 
-            line_xml = []
-            for row in line_rows:
+            def _product_line_xml(row: dict) -> str:
                 sku = row["sku"]
                 sku_raw = row["sku_raw"]
                 desc = row["desc"]
                 if sku_raw and sku_raw not in existing_items and fallback_clean:
-                    # Substitute the fallback item, and stamp the original SKU
-                    # into the description so the line is still identifiable in
-                    # the resulting sales order.
                     note = _clean(f"[{sku_raw}] ")
                     desc = (note + desc).strip()
                     sku = fallback_clean
-                line_xml.append(
-                    f"""
+                return f"""
       <SalesOrderLineAdd>
         <ItemRef><FullName>{sku}</FullName></ItemRef>
         <Desc>{desc}</Desc>
@@ -791,7 +788,70 @@ class QuickBooksClient:
         <Rate>{row["rate"]}</Rate>
         <SalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></SalesTaxCodeRef>
       </SalesOrderLineAdd>"""
+
+            def _header_line_xml(label: str) -> str:
+                # Description-only line: no ItemRef, no Quantity, no Rate.
+                # QuickBooks Desktop accepts this for section headers when
+                # only the Desc element is provided.
+                return f"""
+      <SalesOrderLineAdd>
+        <Desc>{_clean(label)}</Desc>
+      </SalesOrderLineAdd>"""
+
+            def _blank_line_xml() -> str:
+                return """
+      <SalesOrderLineAdd>
+        <Desc></Desc>
+      </SalesOrderLineAdd>"""
+
+            line_xml: list[str] = []
+            if group_by_room:
+                # Walk line_rows in order; whenever the Room value changes
+                # (including to/from blank), close the previous group with two
+                # blank lines and start a new group with a **ROOM** header.
+                # Blank-room groups are labeled "Unnamed Room" or
+                # "Unnamed Room N" when there are multiple of them.
+                raw_groups: list[tuple[str, list[dict]]] = []
+                current_room: str | None = None
+                current_lines: list[dict] = []
+                for row in line_rows:
+                    room_val = row.get("room", "")
+                    if current_room is None:
+                        current_room = room_val
+                        current_lines = [row]
+                    elif room_val == current_room:
+                        current_lines.append(row)
+                    else:
+                        raw_groups.append((current_room, current_lines))
+                        current_room = room_val
+                        current_lines = [row]
+                if current_lines:
+                    raw_groups.append((current_room or "", current_lines))
+
+                unnamed_count = sum(1 for r, _ in raw_groups if not r)
+                unnamed_idx = 0
+                log.info(
+                    "upload_sales_order: room grouping enabled - %d group(s)",
+                    len(raw_groups),
                 )
+                for gi, (room, group_lines) in enumerate(raw_groups):
+                    if room:
+                        label = f"**{room.upper()}**"
+                    elif unnamed_count > 1:
+                        unnamed_idx += 1
+                        label = f"**UNNAMED ROOM {unnamed_idx}**"
+                    else:
+                        label = "**UNNAMED ROOM**"
+                    if gi > 0:
+                        # Two blank separator lines between groups.
+                        line_xml.append(_blank_line_xml())
+                        line_xml.append(_blank_line_xml())
+                    line_xml.append(_header_line_xml(label))
+                    for row in group_lines:
+                        line_xml.append(_product_line_xml(row))
+            else:
+                for row in line_rows:
+                    line_xml.append(_product_line_xml(row))
 
             # QBXML schema requires SalesOrderAdd children in a strict order:
             # CustomerRef, ClassRef, ARAccountRef, TemplateRef, TxnDate,

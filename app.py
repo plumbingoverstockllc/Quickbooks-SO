@@ -18,16 +18,25 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from quickbooks_client import QuickBooksClient, _current_process_elevation
-from transformer import OrderSettings, line_pricing_keys, load_source, transform_to_template, unique_brands, unique_skus
+from transformer import (
+    OrderSettings,
+    ROOM_COLUMN,
+    line_pricing_keys,
+    load_source,
+    transform_to_template,
+    unique_brands,
+    unique_skus,
+)
 
 
 DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabkowski301NHighland (1).xls"
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.000"
+APP_VERSION = "v1.001 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
+BETA_UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/beta.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 LOG_PATH = SETTINGS_DIR / "app.log"
@@ -439,6 +448,7 @@ class SalesOrderApp:
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.fallback_item_var = tk.StringVar(value=self.settings.get("fallback_item", ""))
         self.income_account_var = tk.StringVar(value=self.settings.get("income_account", ""))
+        self.room_grouping_var = tk.BooleanVar(value=bool(self.settings.get("room_grouping_enabled", False)))
         # Default ON: auto-connect on every launch. If the attach fails the
         # status pill just shows "Not Connected" and the user can click
         # Connect manually. The user can opt out by setting
@@ -871,6 +881,7 @@ class SalesOrderApp:
             font=("Segoe UI", 10),
         )
         help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
+        help_menu.add_command(label="Check for Beta Update", command=self.check_for_beta_update)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", f"{APP_NAME} {APP_VERSION}"))
         menu_bar.add_cascade(label="Help", menu=help_menu)
@@ -1014,6 +1025,63 @@ class SalesOrderApp:
             "notes": str(payload.get("notes", "")).strip(),
         }
 
+    def _fetch_beta_release_info(self) -> dict:
+        """Fetch the latest beta release feed. Same shape as the stable feed."""
+        cache_bust_url = f"{BETA_UPDATE_INFO_URL}?t={int(datetime.now().timestamp())}"
+        request = urllib.request.Request(
+            cache_bust_url,
+            headers={
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                "Pragma": "no-cache",
+                "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=10) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return {
+            "version": str(payload.get("version", "")).strip(),
+            "url": str(payload.get("url", "")).strip(),
+            "sha256": str(payload.get("sha256", "")).strip().lower(),
+            "notes": str(payload.get("notes", "")).strip(),
+        }
+
+    def check_for_beta_update(self) -> None:
+        """Manually-triggered beta update check. Offers the beta even when
+        its version is lower than the current installed build, so users can
+        roll forward to a beta from a stable in the same line."""
+        self._set_status("Checking for beta update...")
+        try:
+            info = self._fetch_beta_release_info()
+        except Exception as exc:
+            log.exception("Beta update check failed")
+            messagebox.showerror("Beta Update Check Failed", str(exc))
+            self._set_status("Beta update check failed.")
+            return
+        latest_version = info["version"]
+        download_url = info["url"]
+        sha256_hash = info["sha256"]
+        notes = info["notes"]
+        if not latest_version or not download_url:
+            messagebox.showerror(
+                "Beta Update Check Failed",
+                "The beta release feed didn't include a version or download URL.",
+            )
+            return
+        try:
+            current = self._version_tuple(APP_VERSION)
+            available = self._version_tuple(latest_version)
+        except Exception:
+            current, available = (0, 0, 0), (0, 0, 0)
+        if available == current:
+            messagebox.showinfo(
+                "Beta Update",
+                f"You're already on v{latest_version}.",
+            )
+            return
+        if not self._show_update_dialog(latest_version, notes, is_beta=True):
+            return
+        self._download_and_run_update(download_url, sha256_hash)
+
     def check_for_updates(self, silent: bool = False) -> None:
         try:
             info = self._fetch_release_info()
@@ -1065,16 +1133,16 @@ class SalesOrderApp:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
 
-    def _show_update_dialog(self, latest_version: str, notes: str) -> bool:
+    def _show_update_dialog(self, latest_version: str, notes: str, is_beta: bool = False) -> bool:
         """Present a clean Update Available dialog. Returns True if user wants
         to install, False otherwise."""
         c = UI
         dlg = tk.Toplevel(self.root)
-        dlg.title("Update Available")
+        dlg.title("Beta Update Available" if is_beta else "Update Available")
         dlg.configure(bg=c["bg_window"])
-        dlg.geometry("520x440")
+        dlg.geometry("540x460")
         try:
-            dlg.minsize(440, 360)
+            dlg.minsize(460, 380)
         except tk.TclError:
             pass
         dlg.transient(self.root)
@@ -1082,17 +1150,24 @@ class SalesOrderApp:
 
         decision = {"install": False}
 
-        accent_strip = tk.Frame(dlg, bg=c["accent"], height=3)
+        strip_color = c["warning"] if is_beta else c["accent"]
+        accent_strip = tk.Frame(dlg, bg=strip_color, height=3)
         accent_strip.pack(fill="x", side="top")
 
         body = tk.Frame(dlg, bg=c["bg_window"])
         body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
 
+        heading_color = c["warning"] if is_beta else c["accent"]
+        title_text = (
+            f"Beta v{latest_version} available"
+            if is_beta
+            else f"Version {latest_version} is available"
+        )
         tk.Label(
             body,
-            text=f"Version {latest_version} is available",
+            text=title_text,
             bg=c["bg_window"],
-            fg=c["accent"],
+            fg=heading_color,
             font=("Segoe UI Semibold", 16),
             anchor="w",
         ).pack(fill="x")
@@ -1103,7 +1178,23 @@ class SalesOrderApp:
             fg=c["text_secondary"],
             font=("Segoe UI", 10),
             anchor="w",
-        ).pack(fill="x", pady=(2, 12))
+        ).pack(fill="x", pady=(2, 4))
+        if is_beta:
+            tk.Label(
+                body,
+                text=(
+                    "This is an experimental build that may have rough edges. "
+                    "Use only if you're OK testing new features."
+                ),
+                bg=c["bg_window"],
+                fg=c["warning"],
+                font=("Segoe UI", 10),
+                anchor="w",
+                wraplength=480,
+                justify="left",
+            ).pack(fill="x", pady=(0, 12))
+        else:
+            tk.Frame(body, bg=c["bg_window"], height=8).pack(fill="x")
 
         cleaned = self._clean_release_notes(notes)
         if cleaned:
@@ -1148,7 +1239,8 @@ class SalesOrderApp:
             dlg.destroy()
 
         ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
-        ttk.Button(button_row, text="Install Update", command=install, style="Primary.TButton").pack(
+        install_label = "Install Beta" if is_beta else "Install Update"
+        ttk.Button(button_row, text=install_label, command=install, style="Primary.TButton").pack(
             side="right", padx=(0, 10)
         )
 
@@ -1272,6 +1364,7 @@ class SalesOrderApp:
             "qb_company_file_path": self.qb_company_file_var.get().strip(),
             "fallback_item": self.fallback_item_var.get().strip(),
             "income_account": self.income_account_var.get().strip(),
+            "room_grouping_enabled": bool(self.room_grouping_var.get()),
             "auto_connect_on_startup": self.auto_connect_on_startup,
             "pricing_mode": self.pricing_mode,
             "use_actual_cost": self.use_actual_cost,
@@ -1349,6 +1442,11 @@ class SalesOrderApp:
             3,
             3,
         )
+        ttk.Checkbutton(
+            form,
+            text="Group line items by room (Beta - reads column L of the source file as the room name)",
+            variable=self.room_grouping_var,
+        ).grid(row=7, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 4))
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -1909,6 +2007,19 @@ class SalesOrderApp:
         except Exception as exc:
             messagebox.showerror("Build Preview Error", str(exc))
 
+    def _export_df(self):
+        """Output dataframe with the internal Room column stripped.
+
+        Room is only used internally by the QuickBooks upload to group lines
+        when the user enables that option. It must not appear in the SaaSant
+        Excel export.
+        """
+        if self.output_df is None:
+            return self.output_df
+        if ROOM_COLUMN in self.output_df.columns:
+            return self.output_df.drop(columns=[ROOM_COLUMN])
+        return self.output_df
+
     def export_file(self):
         if self.output_df is None or self.output_df.empty:
             messagebox.showwarning("No data", "Build preview first.")
@@ -1917,7 +2028,7 @@ class SalesOrderApp:
         if not output_path:
             messagebox.showwarning("Missing output path", "Choose an output file path.")
             return
-        self.output_df.to_excel(output_path, index=False, sheet_name="Sales Order")
+        self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
         self._persist_settings()
         self._set_status(f"Exported template file: {Path(output_path).name}")
         self._show_post_export_actions(Path(output_path))
@@ -1933,7 +2044,7 @@ class SalesOrderApp:
         safe_so_value = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
         output_path = downloads_dir / f"SalesOrder_'{safe_so_value}'_{date_part}.xlsx"
 
-        self.output_df.to_excel(output_path, index=False, sheet_name="Sales Order")
+        self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
         self.output_path_var.set(str(output_path))
         self._persist_settings()
         self._set_status(f"SaaSant export ready: {output_path.name}")
@@ -2014,6 +2125,7 @@ class SalesOrderApp:
                 tax_code=self.tax_code_var.get().strip() or "TAX",
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
+                group_by_room=bool(self.room_grouping_var.get()),
             )
             log.info("Upload to QuickBooks: success — %s", result)
             self._set_qb_status("Connected", state="connected")

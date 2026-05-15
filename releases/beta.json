@@ -1,0 +1,6 @@
+{
+  "version": "1.001",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.001-beta/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "1a86b94054c8eadcf42f4bcf677578a9996f3ed1107eed33b3c348783f150098",
+  "notes": "Adds an optional 'Group line items by room' toggle in the Configuration card. When enabled, the QuickBooks upload reads column L of the source file as the room name and inserts a description-only header line (e.g. **KITCHEN**) before each room's products, plus two blank lines between rooms. Off by default. The SaaSant Excel export is unchanged."
+}

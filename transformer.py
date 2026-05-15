@@ -29,6 +29,11 @@ TEMPLATE_COLUMNS = [
     "Currency",
 ]
 
+# Extra column carried internally so the QuickBooks upload can group by room.
+# Source files put the room/area in column L (the 12th column, 0-indexed 11).
+ROOM_COLUMN = "Room"
+ROOM_SOURCE_COLUMN_INDEX = 11
+
 
 @dataclass
 class OrderSettings:
@@ -92,12 +97,23 @@ def transform_to_template(
     errors: List[str] = []
     rows = []
 
+    # Resolve the room column by positional index (column L) so the source
+    # file's header name doesn't matter.
+    room_series = None
+    if source_df.shape[1] > ROOM_SOURCE_COLUMN_INDEX:
+        room_series = source_df.iloc[:, ROOM_SOURCE_COLUMN_INDEX]
+
     for idx, row in source_df.iterrows():
         brand = str(row.get("Brand", "")).strip()
         sku = str(row.get("SKU", "")).strip()
         if not sku:
             errors.append(f"Row {idx + 2}: Missing SKU, skipped.")
             continue
+        if room_series is not None:
+            raw_room = room_series.loc[idx]
+            room_value = "" if pd.isna(raw_room) else str(raw_room).strip()
+        else:
+            room_value = ""
 
         qty = max(1, int(math.ceil(_as_number(row.get("Qty"), default=1))))
         msrp = _as_number(row.get("MSRP"), default=0.0)
@@ -141,10 +157,11 @@ def transform_to_template(
                 "Sales Tax Item": "None",
                 "Customer Sales Tax Code": "None",
                 "Currency": settings.currency,
+                ROOM_COLUMN: room_value,
             }
         )
 
-    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS)
+    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS + [ROOM_COLUMN])
     if output_df.empty:
         errors.append("No valid rows were generated.")
     return output_df, errors
