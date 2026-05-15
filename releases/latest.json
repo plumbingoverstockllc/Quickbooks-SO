@@ -1,6 +1,6 @@
 {
-  "version": "0.9.715",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.715/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "6bbc95fa248a7e7c102ea5b79b43eece88c2b0812deaca3eecd9047adb3b1505",
-  "notes": "Upload now sanitizes every SKU / description / customer name / memo: strips ASCII control characters (which break XML 1.0), collapses embedded newlines/tabs to spaces, and trims whitespace before escaping. The built XML is also validated locally with ElementTree before being sent to QuickBooks, so character-level XML breakage is caught with the exact offending location instead of QuickBooks's generic 'parsing error' (-2147220480). When the SDK rejects the upload, the FULL request XML is now logged (no 8 KB truncation) so the offending row is visible in Log > Open Log File."
+  "version": "0.9.716",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.716/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "ec1a41956a92e8a77d6bce719ddfe9d9eede9a0dc38a35dbcc26f17097ef2c86",
+  "notes": "Fixes Upload to QuickBooks XML parse error for orders containing non-ASCII characters (™, ®, em-dashes, accented chars, mojibake). The QBXMLRP2 SDK rejects payloads with high-codepoint characters even when the XML is well-formed, because pywin32 marshals Python str as UTF-16 BSTR and QB cannot reconcile that with the declared encoding. SKUs and descriptions are now stripped to printable ASCII before being put into the request. Special symbols are dropped (so Pirellone™ becomes Pirellone) but the rest of the description is preserved."
 }

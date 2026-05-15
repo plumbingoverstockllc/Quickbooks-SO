@@ -505,13 +505,29 @@ class QuickBooksClient:
             def _clean(text: str) -> str:
                 """Make a string safe for QBXML element content.
 
-                Strips ASCII control chars except tab/newline/CR (XML 1.0
-                disallows the rest), normalizes any embedded line breaks to
-                spaces, and trims surrounding whitespace. Then html-escapes
-                so the literal `<`, `>`, `&`, quotes are safe.
+                Drops:
+                - ASCII control chars (except tab/newline/CR), which XML 1.0
+                  forbids.
+                - All non-ASCII codepoints (anything above 0x7E). Empirically
+                  QBXMLRP2 returns the generic -2147220480 "parsing error"
+                  whenever the request contains high-codepoint characters,
+                  even when the XML is well-formed by W3C rules. pywin32
+                  marshals Python str -> UTF-16 BSTR, and QB's parser can't
+                  always reconcile that with the declared encoding for
+                  non-ASCII chars. Restricting to printable ASCII removes
+                  that whole class of ambiguity. Visual casualties (™, ®,
+                  em-dashes, accented chars) are dropped but the rest of
+                  the description survives.
+
+                Then normalizes embedded line breaks/tabs to spaces, trims
+                whitespace, and html-escapes so `<`, `>`, `&`, quotes are
+                safe to embed inside an XML element.
                 """
                 s = str(text or "")
-                s = "".join(ch for ch in s if ch == "\t" or ch >= " ")
+                s = "".join(
+                    ch for ch in s
+                    if ch in "\t\n\r" or 0x20 <= ord(ch) <= 0x7E
+                )
                 s = s.replace("\r", " ").replace("\n", " ").strip()
                 return html.escape(s)
 
@@ -575,7 +591,12 @@ class QuickBooksClient:
                 parts.append(f"<Memo>{_clean(memo)}</Memo>")
             parts.append("".join(line_xml))
 
-            request_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+            # Intentionally NO encoding="..." on the XML declaration.
+            # pywin32 marshals Python str -> COM BSTR -> UTF-16, but if the
+            # declaration says "utf-8" QuickBooks's parser refuses the
+            # mismatch with the generic -2147220480 "parsing error". Omitting
+            # the encoding lets QBXMLRP2 use whatever encoding COM delivered.
+            request_xml = f"""<?xml version="1.0"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
