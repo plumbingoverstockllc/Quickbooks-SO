@@ -33,7 +33,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.006"
+APP_VERSION = "v1.007"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -452,7 +452,7 @@ class SalesOrderApp:
         self.tax_code_var = tk.StringVar(value=self.settings.get("tax_code", "TAX"))
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.fallback_item_var = tk.StringVar(value=self.settings.get("fallback_item", ""))
-        self.income_account_var = tk.StringVar(value=self.settings.get("income_account", ""))
+        self.income_account_var = tk.StringVar(value=self.settings.get("income_account", "Sales Non Inventory"))
         self.sales_tax_item_var = tk.StringVar(value=self.settings.get("sales_tax_item", ""))
         self.room_grouping_var = tk.BooleanVar(value=bool(self.settings.get("room_grouping_enabled", False)))
         # Default ON: auto-connect on every launch. If the attach fails the
