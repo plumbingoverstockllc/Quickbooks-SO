@@ -33,7 +33,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.004"
+APP_VERSION = "v1.005"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1561,14 +1561,9 @@ class SalesOrderApp:
         # room_grouping_var stays defined for settings backward-compatibility
         # but is no longer surfaced as a checkbox.
 
-        self._form_entry(
-            form,
-            "Sales Tax Item (the QuickBooks tax item name, e.g. 'CA Tax' or 'Out of State')",
-            self.sales_tax_item_var,
-            7,
-            0,
-            6,
-        )
+        # Sales Tax Item is hard-coded to "CA Tax" in upload_to_quickbooks
+        # (v1.005+). The sales_tax_item_var stays defined for settings
+        # backward-compatibility but is no longer surfaced as a field.
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -2246,7 +2241,7 @@ class SalesOrderApp:
                 memo=self.memo_var.get().strip(),
                 lines=self.output_df.to_dict(orient="records"),
                 tax_code=self.tax_code_var.get().strip() or "TAX",
-                sales_tax_item=self.sales_tax_item_var.get().strip(),
+                sales_tax_item="CA Tax",
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
                 group_by_room=True,

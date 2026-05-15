@@ -1,6 +1,6 @@
 {
-  "version": "1.004",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.004/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "d4adcf00e801243c297e78e922235788eeac3b65a9694c6e91c4ac845068ddc4",
-  "notes": "Adds a 'Sales Tax Item' field in the Configuration card. Set it to your QuickBooks tax item name (for example 'CA Tax' or 'Out of State') and the upload fills that in on every sales order. Fixes the 'Transaction Sales Tax field cannot be left blank' error on QuickBooks files that require a tax rate on every order."
+  "version": "1.005",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.005/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "ebbf3fe1902f47aabbcb5ec51dca5393c96151b5499ab1d2c4ecc2be24cb2be3",
+  "notes": "Sales orders now always use 'CA Tax' as the Sales Tax Item, set automatically on every upload. The Sales Tax Item field added in v1.004 has been removed."
 }
