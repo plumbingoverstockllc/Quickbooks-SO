@@ -33,11 +33,12 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.002 Beta"
-# Features still being tested are gated on this flag. The string baked into
-# APP_VERSION is the single source of truth: any build whose version label
-# contains "Beta" shows beta-only UI; stable builds hide it.
-IS_BETA = "beta" in APP_VERSION.lower()
+APP_VERSION = "v1.002b"
+# Features still being tested are gated on this flag. The version label is
+# the single source of truth: any APP_VERSION ending in 'b' (the beta
+# suffix convention used by this app) shows beta-only UI; stable builds
+# hide it. The older "Beta" suffix is also recognized for backward compat.
+IS_BETA = APP_VERSION.strip().lower().endswith("b") or "beta" in APP_VERSION.lower()
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 BETA_UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/beta.json"
@@ -945,16 +946,32 @@ class SalesOrderApp:
             log.exception("Failed to clear log file")
             messagebox.showerror("Log", f"Could not clear log:\n{exc}")
 
-    def _version_tuple(self, version_str: str) -> tuple[int, int, int]:
-        cleaned = version_str.lower().replace("v", "").replace("beta", "").strip()
+    def _version_tuple(self, version_str: str) -> tuple[int, int, int, int]:
+        """Parse a version string into a tuple suitable for ordering.
+
+        Returns (major, minor, patch, stability) where stability is 0 for a
+        beta build and 1 for a stable build. Sorting tuples then naturally
+        orders v1.002b *between* v1.001 and v1.002 (stable):
+            v1.001    -> (1, 1, 0, 1)
+            v1.002b   -> (1, 2, 0, 0)
+            v1.002    -> (1, 2, 0, 1)
+        Beta is recognized by the 'b' suffix OR the older "Beta" label.
+        """
+        raw = version_str.strip()
+        is_beta = raw.lower().endswith("b") or "beta" in raw.lower()
+        cleaned = raw.lower().replace("v", "").replace("beta", "").strip()
         cleaned = cleaned.split("-")[0]
+        # Strip a trailing 'b' from the last numeric part (e.g. "1.002b").
+        if cleaned.endswith("b"):
+            cleaned = cleaned[:-1]
         parts = cleaned.split(".")
-        nums = []
+        nums: list[int] = []
         for part in parts[:3]:
             num = "".join(ch for ch in part if ch.isdigit())
             nums.append(int(num) if num else 0)
         while len(nums) < 3:
             nums.append(0)
+        nums.append(0 if is_beta else 1)
         return tuple(nums)
 
     def _today_display_date(self) -> str:
@@ -1075,11 +1092,18 @@ class SalesOrderApp:
             current = self._version_tuple(APP_VERSION)
             available = self._version_tuple(latest_version)
         except Exception:
-            current, available = (0, 0, 0), (0, 0, 0)
+            current, available = (0, 0, 0, 0), (0, 0, 0, 0)
         if available == current:
             messagebox.showinfo(
                 "Beta Update",
                 f"You're already on v{latest_version}.",
+            )
+            return
+        if available < current:
+            messagebox.showinfo(
+                "Beta Update",
+                f"You're on {APP_VERSION}, which is already newer than the "
+                f"latest beta (v{latest_version}). Nothing to install.",
             )
             return
         if not self._show_update_dialog(latest_version, notes, is_beta=True):

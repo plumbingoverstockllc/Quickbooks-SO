@@ -1,6 +1,6 @@
 {
-  "version": "1.002",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002-beta/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "f91e42f0ace9eae6296ea196795b2182cc3922a5f22272c6fe3dfd94999d15be",
-  "notes": "Optional 'Group line items by room' toggle in Configuration that reads column L of the source file and inserts a room header line plus blank lines between sections during the QuickBooks upload. After upload, you also get a report listing every item the app created in QuickBooks during this run, with a Copy as Table button."
+  "version": "1.002b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "3443bbdf084071d88b7532706832f247523f8e679c64840ba0df8b782d537fa2",
+  "notes": "Beta releases are now suffixed with a 'b' (v1.002b instead of v1.002 Beta). Includes the room grouping toggle and the new Created Items report from the previous beta."
 }
