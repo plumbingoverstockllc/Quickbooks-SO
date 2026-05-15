@@ -1,6 +1,6 @@
 {
-  "version": "0.9.716",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.716/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "ec1a41956a92e8a77d6bce719ddfe9d9eede9a0dc38a35dbcc26f17097ef2c86",
-  "notes": "Fixes Upload to QuickBooks XML parse error for orders containing non-ASCII characters (™, ®, em-dashes, accented chars, mojibake). The QBXMLRP2 SDK rejects payloads with high-codepoint characters even when the XML is well-formed, because pywin32 marshals Python str as UTF-16 BSTR and QB cannot reconcile that with the declared encoding. SKUs and descriptions are now stripped to printable ASCII before being put into the request. Special symbols are dropped (so Pirellone™ becomes Pirellone) but the rest of the description is preserved."
+  "version": "0.9.800",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.800/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "7f07e52dc84d8b91f66b189c9bb83fb9b8706d1974269fb0218d47bbb2c7f856",
+  "notes": "Upload now pre-checks every SKU against the QuickBooks item list. New 'Fallback Item' field in the Configuration card: when set, any line whose SKU does not exist in QuickBooks is uploaded under the fallback item, with the original SKU prepended to the line description so the line is still identifiable. If a sales order references missing SKUs and no Fallback Item is configured, upload now fails with a clear list of the missing SKUs instead of QuickBooks's generic 'invalid reference' error 3140."
 }

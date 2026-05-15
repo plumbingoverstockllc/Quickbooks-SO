@@ -488,6 +488,63 @@ class QuickBooksClient:
         finally:
             self.close()
 
+    def _query_existing_items(self, skus: Iterable[str]) -> set[str]:
+        """Return the subset of `skus` that exist in the QuickBooks Item list.
+
+        Batches FullName filters into one ItemQueryRq per chunk to keep the
+        number of round-trips low. The SDK accepts multiple <FullName>
+        elements in a single ItemQueryRq.
+
+        Caller must already be inside an active BeginSession (connect()).
+        """
+        unique = sorted({s for s in (str(x or "").strip() for x in skus) if s})
+        if not unique:
+            return set()
+        existing: set[str] = set()
+        chunk_size = 50
+        for i in range(0, len(unique), chunk_size):
+            chunk = unique[i : i + chunk_size]
+            fullnames_xml = "".join(f"<FullName>{html.escape(s)}</FullName>" for s in chunk)
+            query_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <ItemQueryRq>
+      {fullnames_xml}
+      <IncludeRetElement>Name</IncludeRetElement>
+      <IncludeRetElement>FullName</IncludeRetElement>
+    </ItemQueryRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+            try:
+                response = self._process(query_xml)
+            except Exception:
+                log.exception("_query_existing_items: ItemQuery chunk failed; assuming all missing")
+                continue
+            try:
+                root = ET.fromstring(response)
+            except ET.ParseError:
+                log.exception("_query_existing_items: could not parse ItemQuery response")
+                continue
+            for full in root.iter("FullName"):
+                if full.text:
+                    existing.add(full.text.strip())
+            for name in root.iter("Name"):
+                if name.text:
+                    existing.add(name.text.strip())
+            log.debug(
+                "_query_existing_items: chunk %d (%d skus) — %d found so far",
+                i // chunk_size + 1,
+                len(chunk),
+                len(existing),
+            )
+        log.info(
+            "_query_existing_items: %d of %d requested SKUs exist in QuickBooks",
+            len(existing & set(unique)),
+            len(unique),
+        )
+        return existing
+
     def upload_sales_order(
         self,
         customer_name: str,
@@ -499,6 +556,7 @@ class QuickBooksClient:
         memo: str,
         lines: Iterable[dict],
         tax_code: str,
+        fallback_item: str = "",
     ) -> str:
         self.connect()
         try:
@@ -531,25 +589,84 @@ class QuickBooksClient:
                 s = s.replace("\r", " ").replace("\n", " ").strip()
                 return html.escape(s)
 
-            line_xml = []
+            # Materialize lines once so we can pre-flight the SKU check and
+            # still iterate them when building the XML.
+            line_rows: list[dict] = []
             for idx, line in enumerate(lines, start=1):
                 try:
-                    sku = _clean(line["Product/Service"])
-                    desc = _clean(line["Product/Service Description"])
-                    qty = float(line["Product/Service Quantity"])
-                    rate = float(line["Product/Service Rate"])
+                    line_rows.append({
+                        "idx": idx,
+                        "sku_raw": str(line["Product/Service"] or "").strip(),
+                        "sku": _clean(line["Product/Service"]),
+                        "desc": _clean(line["Product/Service Description"]),
+                        "qty": float(line["Product/Service Quantity"]),
+                        "rate": float(line["Product/Service Rate"]),
+                    })
                 except Exception as exc:
                     raise RuntimeError(
                         f"Line {idx} has invalid data ({exc}). Check the SKU, "
                         f"description, quantity, and rate for that row before uploading."
                     )
+
+            # Pre-flight: which SKUs actually exist in the QuickBooks item list?
+            # Missing items would otherwise fail the whole SalesOrderAdd with
+            # error 3140. If a fallback_item is configured we substitute it in
+            # place and annotate the description; otherwise we raise a clear
+            # error listing the missing SKUs and explaining how to fix it.
+            raw_skus = [row["sku_raw"] for row in line_rows if row["sku_raw"]]
+            existing_items = self._query_existing_items(raw_skus)
+            missing_skus = sorted({s for s in raw_skus if s not in existing_items})
+            fallback_clean = _clean(fallback_item)
+            if missing_skus:
+                if not fallback_clean:
+                    log.error(
+                        "upload_sales_order: %d SKU(s) not in QuickBooks item list and no Fallback Item set: %s",
+                        len(missing_skus),
+                        ", ".join(missing_skus[:20]),
+                    )
+                    raise RuntimeError(
+                        f"{len(missing_skus)} item(s) in this sales order do not exist in QuickBooks "
+                        f"and no Fallback Item is set:\n\n  "
+                        + ", ".join(missing_skus[:20])
+                        + ("\n  ..." if len(missing_skus) > 20 else "")
+                        + "\n\nSet 'Fallback Item' in the Configuration card to the name of a "
+                        "QuickBooks item this app can use as a stand-in for missing SKUs "
+                        "(the original SKU will be added to the line description), or add "
+                        "the missing items to QuickBooks first."
+                    )
+                # Verify the fallback itself exists, otherwise the substitution
+                # just trades one 3140 for another.
+                if fallback_clean and fallback_item.strip() not in self._query_existing_items([fallback_item.strip()]):
+                    raise RuntimeError(
+                        f"Fallback Item {fallback_item!r} does not exist in QuickBooks. "
+                        f"Set Fallback Item in the Configuration card to a real item name."
+                    )
+                log.warning(
+                    "upload_sales_order: substituting %d missing SKU(s) with fallback %r: %s",
+                    len(missing_skus),
+                    fallback_item.strip(),
+                    ", ".join(missing_skus[:20]),
+                )
+
+            line_xml = []
+            for row in line_rows:
+                sku = row["sku"]
+                sku_raw = row["sku_raw"]
+                desc = row["desc"]
+                if sku_raw and sku_raw not in existing_items and fallback_clean:
+                    # Substitute the fallback item, and stamp the original SKU
+                    # into the description so the line is still identifiable in
+                    # the resulting sales order.
+                    note = _clean(f"[{sku_raw}] ")
+                    desc = (note + desc).strip()
+                    sku = fallback_clean
                 line_xml.append(
                     f"""
       <SalesOrderLineAdd>
         <ItemRef><FullName>{sku}</FullName></ItemRef>
         <Desc>{desc}</Desc>
-        <Quantity>{qty}</Quantity>
-        <Rate>{rate}</Rate>
+        <Quantity>{row["qty"]}</Quantity>
+        <Rate>{row["rate"]}</Rate>
         <SalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></SalesTaxCodeRef>
       </SalesOrderLineAdd>"""
                 )
