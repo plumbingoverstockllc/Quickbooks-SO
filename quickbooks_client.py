@@ -716,6 +716,8 @@ class QuickBooksClient:
         name: str,
         desc: str,
         income_account: str,
+        cost: float = 0.0,
+        expense_account: str = "",
     ) -> tuple[bool, str]:
         """Create a Non-Inventory item in QuickBooks.
 
@@ -734,12 +736,36 @@ class QuickBooksClient:
         name_clean = _ascii(name)
         desc_clean = _ascii(desc)
         income_clean = _ascii(income_account)
+        expense_clean = _ascii(expense_account)
         if not name_clean or not income_clean:
             return False, "missing name or income account"
+        # When an expense account is provided we use the SalesAndPurchase
+        # block, which lets us stamp PurchaseCost + ExpenseAccountRef onto
+        # the new item (so QuickBooks shows the cost in Purchase Information
+        # and posts COGS correctly). Otherwise we fall back to the simpler
+        # SalesOrPurchase block (sales-side only).
+        if expense_clean:
+            cost_xml = ""
+            try:
+                cost_value = float(cost or 0.0)
+            except Exception:
+                cost_value = 0.0
+            if cost_value > 0:
+                cost_xml = f"<PurchaseCost>{cost_value}</PurchaseCost>"
+            body = f"""        <SalesAndPurchase>
+          <SalesDesc>{desc_clean}</SalesDesc>
+          <IncomeAccountRef><FullName>{income_clean}</FullName></IncomeAccountRef>
+          <PurchaseDesc>{desc_clean}</PurchaseDesc>
+          {cost_xml}
+          <ExpenseAccountRef><FullName>{expense_clean}</FullName></ExpenseAccountRef>
+        </SalesAndPurchase>"""
+        else:
+            body = f"""        <SalesOrPurchase>
+          <Desc>{desc_clean}</Desc>
+          <AccountRef><FullName>{income_clean}</FullName></AccountRef>
+        </SalesOrPurchase>"""
         # QBXML schema: each Add must be wrapped in a corresponding *Rq.
-        # ItemNonInventoryAdd requires Name + IsActive; the SalesOrPurchase
-        # block requires AccountRef. Price omitted on purpose so the item
-        # has no default rate -- each SO line still carries its own.
+        # ItemNonInventoryAdd requires Name + IsActive.
         req_xml = f"""<?xml version="1.0"?>
 <?qbxml version="13.0"?>
 <QBXML>
@@ -748,10 +774,7 @@ class QuickBooksClient:
       <ItemNonInventoryAdd>
         <Name>{name_clean}</Name>
         <IsActive>true</IsActive>
-        <SalesOrPurchase>
-          <Desc>{desc_clean}</Desc>
-          <AccountRef><FullName>{income_clean}</FullName></AccountRef>
-        </SalesOrPurchase>
+{body}
       </ItemNonInventoryAdd>
     </ItemNonInventoryAddRq>
   </QBXMLMsgsRq>
@@ -789,6 +812,7 @@ class QuickBooksClient:
         income_account: str = "",
         group_by_room: bool = False,
         sales_tax_item: str = "",
+        expense_account: str = "",
     ) -> str:
         self.last_created_items = []
         self.connect()
@@ -811,6 +835,12 @@ class QuickBooksClient:
             line_rows: list[dict] = []
             for idx, line in enumerate(lines, start=1):
                 try:
+                    line_cost = 0.0
+                    if isinstance(line, dict):
+                        try:
+                            line_cost = float(line.get("Cost", 0) or 0)
+                        except Exception:
+                            line_cost = 0.0
                     line_rows.append({
                         "idx": idx,
                         "sku_raw": str(line["Product/Service"] or "").strip(),
@@ -818,6 +848,7 @@ class QuickBooksClient:
                         "desc": _clean(line["Product/Service Description"]),
                         "qty": float(line["Product/Service Quantity"]),
                         "rate": float(line["Product/Service Rate"]),
+                        "cost": line_cost,
                         "room": str(line.get("Room", "") or "").strip() if isinstance(line, dict) else "",
                     })
                 except Exception as exc:
@@ -850,21 +881,27 @@ class QuickBooksClient:
                         len(missing_skus),
                         income_clean,
                     )
-                    # Build a SKU -> description map from the input lines so the
-                    # newly-created items get a useful default description.
+                    # Build SKU -> (description, cost) maps from the input
+                    # lines so each newly-created item carries the right
+                    # default description and PurchaseCost.
                     desc_by_sku: dict[str, str] = {}
+                    cost_by_sku: dict[str, float] = {}
                     for row in line_rows:
                         s = row["sku_raw"]
                         if s and s not in desc_by_sku:
                             desc_by_sku[s] = row.get("desc", "")
+                            cost_by_sku[s] = float(row.get("cost", 0) or 0)
                     created: list[str] = []
                     failed: list[tuple[str, str]] = []
                     for sku in missing_skus:
                         line_desc = desc_by_sku.get(sku, "")
+                        line_cost = cost_by_sku.get(sku, 0.0)
                         ok, msg = self._add_non_inventory_item(
                             name=sku,
                             desc=line_desc,
                             income_account=income_clean,
+                            cost=line_cost,
+                            expense_account=expense_account,
                         )
                         if ok:
                             created.append(sku)
@@ -873,6 +910,8 @@ class QuickBooksClient:
                                 "sku": sku,
                                 "description": line_desc,
                                 "income_account": income_clean,
+                                "expense_account": expense_account,
+                                "cost": line_cost,
                             })
                         else:
                             failed.append((sku, msg))

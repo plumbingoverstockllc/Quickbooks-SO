@@ -1,6 +1,6 @@
 {
-  "version": "1.008",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.008/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "7f126d42fbf930f9f4032a8976fdf1ebfa7d372d251b9a1c5391fa6019210ce4",
-  "notes": "Fixes the upload error introduced in v1.006 where the customer tax-item helpers raised a NameError. The XML cleanup function is now shared across the whole module so the customer-default-tax-item flow works."
+  "version": "1.009",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.009/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "0d57488336260c9cf7a1dd0c1c423bead6da4dc2333fd1090131f182d5c2c6ac",
+  "notes": "Sales order rate now reads directly from column J (Price) of the source file. Auto-created items now also get their Cost (column I) stamped onto the Purchase side with COGS Non Inventory as the expense account, so QuickBooks shows the right cost and posts COGS correctly. The legacy MSRP-times-brand-multiplier rate is still used only when column J is empty."
 }

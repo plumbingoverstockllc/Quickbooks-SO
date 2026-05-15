@@ -34,6 +34,11 @@ TEMPLATE_COLUMNS = [
 ROOM_COLUMN = "Room"
 ROOM_SOURCE_COLUMN_INDEX = 11
 
+# Extra column carried internally so the upload can stamp the per-line cost
+# onto any auto-created Non-Inventory items in QuickBooks. The source file's
+# column I holds the wholesale cost.
+COST_COLUMN = "Cost"
+
 
 @dataclass
 class OrderSettings:
@@ -117,6 +122,8 @@ def transform_to_template(
 
         qty = max(1, int(math.ceil(_as_number(row.get("Qty"), default=1))))
         msrp = _as_number(row.get("MSRP"), default=0.0)
+        cost_value = _as_number(row.get("Cost"), default=0.0)
+        source_price = _as_number(row.get("Price"), default=0.0)
         if msrp <= 0:
             errors.append(f"Row {idx + 2} ({sku}): MSRP is 0 or missing.")
 
@@ -127,7 +134,13 @@ def transform_to_template(
         else:
             key = str(int(idx) + 2)
         configured_value = pricing_values.get(key, default_value)
-        if use_actual_cost:
+        # Source column J "Price" is the pre-calculated sale price for the
+        # line. Use it when present; otherwise fall back to the legacy
+        # MSRP * brand-multiplier calculation so older source files without
+        # a Price column still build.
+        if source_price > 0:
+            rate = round(source_price, 2)
+        elif use_actual_cost:
             rate = round(configured_value, 2)
         else:
             rate = round(msrp * configured_value, 2)
@@ -158,10 +171,11 @@ def transform_to_template(
                 "Customer Sales Tax Code": "None",
                 "Currency": settings.currency,
                 ROOM_COLUMN: room_value,
+                COST_COLUMN: cost_value,
             }
         )
 
-    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS + [ROOM_COLUMN])
+    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS + [ROOM_COLUMN, COST_COLUMN])
     if output_df.empty:
         errors.append("No valid rows were generated.")
     return output_df, errors

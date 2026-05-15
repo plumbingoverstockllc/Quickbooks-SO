@@ -19,6 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from quickbooks_client import QuickBooksClient, _current_process_elevation
 from transformer import (
+    COST_COLUMN,
     OrderSettings,
     ROOM_COLUMN,
     line_pricing_keys,
@@ -33,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.008"
+APP_VERSION = "v1.009"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2125,17 +2126,16 @@ class SalesOrderApp:
             messagebox.showerror("Build Preview Error", str(exc))
 
     def _export_df(self):
-        """Output dataframe with the internal Room column stripped.
+        """Output dataframe with internal-only columns stripped.
 
-        Room is only used internally by the QuickBooks upload to group lines
-        when the user enables that option. It must not appear in the SaaSant
+        Room and Cost are used internally by the QuickBooks upload for
+        grouping and item-create cost. Neither belongs in the SaaSant
         Excel export.
         """
         if self.output_df is None:
             return self.output_df
-        if ROOM_COLUMN in self.output_df.columns:
-            return self.output_df.drop(columns=[ROOM_COLUMN])
-        return self.output_df
+        drop_cols = [c for c in (ROOM_COLUMN, COST_COLUMN) if c in self.output_df.columns]
+        return self.output_df.drop(columns=drop_cols) if drop_cols else self.output_df
 
     def export_file(self):
         if self.output_df is None or self.output_df.empty:
@@ -2244,6 +2244,7 @@ class SalesOrderApp:
                 sales_tax_item="CA Tax",
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
+                expense_account="COGS Non Inventory",
                 group_by_room=True,
             )
             log.info("Upload to QuickBooks: success — %s", result)
