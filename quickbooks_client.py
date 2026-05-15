@@ -80,10 +80,19 @@ def _current_process_elevation() -> str:
 
 
 def _quickbooks_process_details() -> list[dict]:
+    """Return one entry per *real* QuickBooks UI process.
+
+    The QBXMLRP2 SDK runs an auxiliary qbw.exe whose top-level window title
+    is "DDE Server Window". That helper is part of QuickBooks itself — it is
+    expected and should not be treated as a second user-facing QB instance.
+    Likewise tasklist sometimes reports system-side qbw helpers with no
+    window. We filter both so the "multiple QB processes" safety gate only
+    fires for genuine second sessions.
+    """
     details: list[dict] = []
     try:
         result = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
+            ["tasklist", "/V", "/FO", "CSV", "/NH"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -103,11 +112,16 @@ def _quickbooks_process_details() -> list[dict]:
                 pid = int(parts[1].strip('"'))
             except Exception:
                 pid = -1
+            window_title = parts[-1].strip() if len(parts) >= 9 else ""
+            # Skip SDK helpers — they always carry the DDE server title.
+            if window_title and window_title.lower() == "dde server window":
+                continue
             details.append(
                 {
                     "name": exe_name,
                     "pid": pid,
                     "elevation": _is_process_elevated(pid) if pid > 0 else "unknown",
+                    "window_title": window_title,
                 }
             )
     except Exception:
@@ -272,49 +286,39 @@ class QuickBooksClient:
                 f"Context: {context_note}"
             )
 
+        # Real-instance check: refuse only when there are genuinely multiple
+        # *user-facing* QuickBooks UI processes (DDE Server helpers were
+        # already filtered out in _quickbooks_process_details). One main
+        # company-file window + the SDK helper is the normal steady state.
         if len(qb_details) > 1:
             context_note = _runtime_context_note()
-            log.error("connect(): multiple QuickBooks processes detected; refusing attach")
+            log.error("connect(): multiple user-facing QuickBooks UI processes detected; refusing attach")
             log.error("connect(): context diagnostics: %s", context_note)
             self.close()
             raise RuntimeError(
-                "Multiple QuickBooks processes are running. This app will not attempt to connect "
+                "Multiple QuickBooks windows are open. This app will not attempt to connect "
                 "until only one QuickBooks instance remains.\n\n"
-                "Close all QuickBooks windows/processes, reopen one company file once, then retry.\n\n"
+                "Close all QuickBooks windows, reopen one company file, then retry.\n\n"
                 f"Context: {context_note}"
             )
 
-        # Additional hard gate: never attempt BeginSession from an elevated app.
-        # In this environment, that can trigger QuickBooks to spawn a secondary
-        # elevated window/session even when the main QB instance is standard.
+        # Elevation is reported but no longer used to refuse the attach. The
+        # working v0.9.708 attach succeeded in non-elevated mode; elevation is
+        # left as informational diagnostic so the log still captures it when an
+        # attach actually fails later.
         if app_elevation == "elevated":
-            context_note = _runtime_context_note()
-            log.error("connect(): app is elevated; refusing BeginSession to avoid secondary QB launch")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "This app is running elevated (Run as Administrator). To prevent QuickBooks "
-                "from spawning a secondary window/session, connection is blocked in elevated mode.\n\n"
-                "Close this app and reopen it normally (non-admin), and run QuickBooks in the "
-                "same non-admin context.\n\n"
-                f"Context: {context_note}"
+            log.warning(
+                "connect(): app is elevated; QuickBooks may surface a UAC permission prompt or "
+                "spawn an additional window. Proceeding with attach attempt anyway."
             )
-
-        # Match-elevation gate: block before BeginSession if QuickBooks process
-        # elevation differs from this app.
         mismatched = [
             row for row in qb_details if row.get("elevation") not in ("unknown", app_elevation)
         ]
         if mismatched:
-            context_note = _runtime_context_note()
-            log.error("connect(): app/QB elevation mismatch detected; refusing BeginSession")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "QuickBooks and this app are running at different UAC elevation levels. "
-                "Connection is blocked before BeginSession to avoid spawning extra QuickBooks windows.\n\n"
-                "Run both QuickBooks and this app at the same level (recommended: both standard/non-admin).\n\n"
-                f"Context: {context_note}"
+            log.warning(
+                "connect(): QuickBooks/app UAC elevation mismatch (%s vs %s). Attach may fail.",
+                mismatched[0].get("elevation"),
+                app_elevation,
             )
 
         if _has_no_company_open_window():

@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.709 Beta"
+APP_VERSION = "v0.9.710 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -58,32 +58,32 @@ log.info("Settings dir: %s", SETTINGS_DIR)
 log.info("Log file: %s", LOG_PATH)
 
 UI = {
-    "bg_window": "#F7F7F7",
+    "bg_window": "#F4F6FA",
     "bg_card": "#FFFFFF",
-    "bg_subtle": "#F4F4F4",
-    "bg_hover": "#EFEFEF",
-    "bg_pressed": "#E7E7E7",
-    "border": "#DDDDDD",
-    "border_strong": "#C8C8C8",
+    "bg_subtle": "#EEF2F7",
+    "bg_hover": "#E3EAF3",
+    "bg_pressed": "#D6E0EE",
+    "border": "#DCE3EE",
+    "border_strong": "#BFC8D7",
     "border_inner_light": "#FFFFFF",
-    "text_primary": "#222222",
-    "text_secondary": "#6A6A6A",
-    "text_tertiary": "#A1A1A1",
-    "accent": "#FF385C",
-    "accent_light": "#FF5A78",
-    "accent_hover": "#E31C5F",
-    "accent_pressed": "#D70466",
-    "accent_dark": "#C1355D",
-    "accent_bg": "#FFE8EE",
+    "text_primary": "#0F172A",
+    "text_secondary": "#475569",
+    "text_tertiary": "#94A3B8",
+    "accent": "#2563EB",
+    "accent_light": "#3B82F6",
+    "accent_hover": "#1D4ED8",
+    "accent_pressed": "#1E40AF",
+    "accent_dark": "#1E3A8A",
+    "accent_bg": "#DBEAFE",
     "btn_light_top": "#FFFFFF",
-    "btn_light_bottom": "#F7F7F7",
-    "btn_light_border": "#DDDDDD",
-    "success": "#008A05",
-    "success_bg": "#EAF8EA",
-    "warning": "#B05D00",
-    "warning_bg": "#FFF3E4",
-    "danger": "#C13515",
-    "danger_bg": "#FDECEA",
+    "btn_light_bottom": "#F4F6FA",
+    "btn_light_border": "#DCE3EE",
+    "success": "#15803D",
+    "success_bg": "#E5F5EC",
+    "warning": "#B45309",
+    "warning_bg": "#FEF3C7",
+    "danger": "#B91C1C",
+    "danger_bg": "#FEE2E2",
 }
 
 

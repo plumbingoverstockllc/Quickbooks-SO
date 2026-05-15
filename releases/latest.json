@@ -1,6 +1,6 @@
 {
-  "version": "0.9.709",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.709/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "c29e8c70013809b0cf2c6324cdaae81ebb505120bbf9f42fc6fbee3dd3804911",
-  "notes": "Fetch Next from QuickBooks now applies RefNumberRangeFilter FromRefNumber=168250, so the SalesOrderQuery skips the entire historical tail instead of scanning every sales order. Result: the query returns in seconds instead of minutes on large company files."
+  "version": "0.9.710",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.710/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "dbe3b074f93ec9789d8ba3250b457c15c0b72add9e20141051e3599b9c9f17d8",
+  "notes": "Connect no longer treats QuickBooks's own SDK helper (the qbw.exe whose window title is 'DDE Server Window') as a duplicate QuickBooks instance, and no longer refuses to attach when this app is running elevated. UI accent recolored from red/pink to blue/black."
 }
