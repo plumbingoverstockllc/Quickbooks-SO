@@ -207,6 +207,25 @@ def _normalize_company_path(path: str) -> str:
     return normalized
 
 
+def _clean(text: str) -> str:
+    """Make a string safe to embed as the text content of a QBXML element.
+
+    Drops ASCII control chars (except tab/newline/CR) and any non-ASCII
+    codepoints, normalizes line breaks to spaces, trims, then html-escapes
+    so `<`, `>`, `&`, quotes are safe.
+
+    See upload_sales_order for the long explanation of why non-ASCII is
+    stripped (pywin32 marshalling vs. QB's parser).
+    """
+    s = str(text or "")
+    s = "".join(
+        ch for ch in s
+        if ch in "\t\n\r" or 0x20 <= ord(ch) <= 0x7E
+    )
+    s = s.replace("\r", " ").replace("\n", " ").strip()
+    return html.escape(s)
+
+
 def _to_qb_date(date_text: str) -> str:
     """Convert a user-entered or display date to QBXML's YYYY-MM-DD format.
 
@@ -782,34 +801,10 @@ class QuickBooksClient:
             # the upload attempt.
             if sales_tax_item:
                 self._ensure_customer_tax_item(customer_name, sales_tax_item)
-            def _clean(text: str) -> str:
-                """Make a string safe for QBXML element content.
 
-                Drops:
-                - ASCII control chars (except tab/newline/CR), which XML 1.0
-                  forbids.
-                - All non-ASCII codepoints (anything above 0x7E). Empirically
-                  QBXMLRP2 returns the generic -2147220480 "parsing error"
-                  whenever the request contains high-codepoint characters,
-                  even when the XML is well-formed by W3C rules. pywin32
-                  marshals Python str -> UTF-16 BSTR, and QB's parser can't
-                  always reconcile that with the declared encoding for
-                  non-ASCII chars. Restricting to printable ASCII removes
-                  that whole class of ambiguity. Visual casualties (™, ®,
-                  em-dashes, accented chars) are dropped but the rest of
-                  the description survives.
-
-                Then normalizes embedded line breaks/tabs to spaces, trims
-                whitespace, and html-escapes so `<`, `>`, `&`, quotes are
-                safe to embed inside an XML element.
-                """
-                s = str(text or "")
-                s = "".join(
-                    ch for ch in s
-                    if ch in "\t\n\r" or 0x20 <= ord(ch) <= 0x7E
-                )
-                s = s.replace("\r", " ").replace("\n", " ").strip()
-                return html.escape(s)
+            # _clean is module-level (see top of this file) so the customer-
+            # tax-item helpers can use it too. The local redefinition that
+            # used to live here was removed.
 
             # Materialize lines once so we can pre-flight the SKU check and
             # still iterate them when building the XML.

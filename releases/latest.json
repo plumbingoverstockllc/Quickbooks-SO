@@ -1,6 +1,6 @@
 {
-  "version": "1.007",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.007/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "e63c57e7936368f141253723d7fa4cc1bc24e00b88240f12976f0b9d27a84669",
-  "notes": "The Default Income Account field is now pre-filled with 'Sales Non Inventory' on fresh installs, so missing SKUs auto-create under that account without any setup. Existing installs keep whatever account you already configured."
+  "version": "1.008",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.008/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "7f126d42fbf930f9f4032a8976fdf1ebfa7d372d251b9a1c5391fa6019210ce4",
+  "notes": "Fixes the upload error introduced in v1.006 where the customer tax-item helpers raised a NameError. The XML cleanup function is now shared across the whole module so the customer-default-tax-item flow works."
 }
