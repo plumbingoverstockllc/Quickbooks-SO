@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.009"
+APP_VERSION = "v1.010"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2120,10 +2120,136 @@ class SalesOrderApp:
                 if not self.brand_values and not self.item_values and not self.line_values:
                     return
 
+            # When pricing by brand, prompt for any brands in the source that
+            # aren't already in the stored brand_values. Falling back to the
+            # default multiplier silently is what produced the "got cost
+            # instead of price" surprise in earlier versions.
+            if self.pricing_mode == "brand":
+                source_brands = unique_brands(self.source_df)
+                missing = [b for b in source_brands if b and b not in self.brand_values]
+                if missing:
+                    cancelled = self._prompt_missing_brand_multipliers(missing)
+                    if cancelled:
+                        return
+
             self._rebuild_previews_from_source()
             messagebox.showinfo("Preview Ready", f"Generated {len(self.output_df)} template rows.")
         except Exception as exc:
             messagebox.showerror("Build Preview Error", str(exc))
+
+    def _prompt_missing_brand_multipliers(self, missing_brands: list[str]) -> bool:
+        """Show a dialog listing brands not yet in self.brand_values and
+        ask the user to enter a multiplier (or actual cost) for each. The
+        entered values are written back to self.brand_values and persisted.
+
+        Returns True when the user cancelled (preview build should abort),
+        False when they entered values and saved.
+        """
+        c = UI
+        dlg = tk.Toplevel(self.root)
+        dlg.title("New Brands Detected")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("560x520")
+        try:
+            dlg.minsize(460, 380)
+        except tk.TclError:
+            pass
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        outcome = {"cancelled": True}
+
+        accent = tk.Frame(dlg, bg=c["accent"], height=3)
+        accent.pack(fill="x", side="top")
+
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
+
+        tk.Label(
+            body,
+            text=f"{len(missing_brands)} new brand(s) need pricing",
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill="x")
+        if self.use_actual_cost:
+            sub = "Enter the actual cost/rate for each brand."
+        else:
+            sub = f"Enter the MSRP multiplier for each brand (default {self.default_pricing_value})."
+        tk.Label(
+            body,
+            text=sub,
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+            wraplength=500,
+            justify="left",
+        ).pack(fill="x", pady=(4, 12))
+
+        wrapper = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
+        wrapper.pack(fill="both", expand=True)
+        canvas = tk.Canvas(wrapper, highlightthickness=0, bg=c["bg_card"], bd=0)
+        scroll = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas, style="Card.TFrame")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
+        scroll.pack(side="right", fill="y", pady=8)
+
+        entry_vars: dict[str, tk.StringVar] = {}
+        for brand in missing_brands:
+            row = ttk.Frame(inner, style="Card.TFrame")
+            row.pack(fill="x", padx=10, pady=4)
+            ttk.Label(row, text=brand, style="Card.TLabel").pack(side="left")
+            var = tk.StringVar(value=str(self.default_pricing_value))
+            entry = ttk.Entry(row, textvariable=var, width=10)
+            entry.pack(side="right")
+            entry_vars[brand] = var
+
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", pady=(12, 0))
+
+        def cancel():
+            outcome["cancelled"] = True
+            dlg.destroy()
+
+        def save():
+            try:
+                parsed = {}
+                for brand, var in entry_vars.items():
+                    text = var.get().strip()
+                    if not text:
+                        raise ValueError(f"{brand}: value is empty")
+                    parsed[brand] = float(text)
+            except ValueError as exc:
+                messagebox.showerror("Invalid Value", str(exc), parent=dlg)
+                return
+            self.brand_values.update(parsed)
+            self._persist_settings()
+            outcome["cancelled"] = False
+            dlg.destroy()
+
+        ttk.Button(button_row, text="Cancel", command=cancel, style="Quiet.TButton").pack(side="right")
+        ttk.Button(button_row, text="Save and Continue", command=save, style="Primary.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+
+        dlg.protocol("WM_DELETE_WINDOW", cancel)
+        dlg.update_idletasks()
+        try:
+            self.root.update_idletasks()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            dw, dh = dlg.winfo_width(), dlg.winfo_height()
+            dlg.geometry(f"+{rx + (rw - dw) // 2}+{ry + (rh - dh) // 2}")
+        except tk.TclError:
+            pass
+
+        dlg.wait_window()
+        return outcome["cancelled"]
 
     def _export_df(self):
         """Output dataframe with internal-only columns stripped.
