@@ -1,6 +1,6 @@
 {
-  "version": "0.9.800",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.800/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "7f07e52dc84d8b91f66b189c9bb83fb9b8706d1974269fb0218d47bbb2c7f856",
-  "notes": "Upload now pre-checks every SKU against the QuickBooks item list. New 'Fallback Item' field in the Configuration card: when set, any line whose SKU does not exist in QuickBooks is uploaded under the fallback item, with the original SKU prepended to the line description so the line is still identifiable. If a sales order references missing SKUs and no Fallback Item is configured, upload now fails with a clear list of the missing SKUs instead of QuickBooks's generic 'invalid reference' error 3140."
+  "version": "0.9.801",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.801/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "534b48bc4c17d8f48bd5955c5af8f9100ea14134bfa887b4e8ccc0ca85d2ff33",
+  "notes": "New 'Default Income Account' field in Configuration. When set, missing SKUs are auto-created in QuickBooks as Non-Inventory items under that income account, keeping each unique SKU instead of lumping them under a Fallback Item. Fallback Item is now only used when no income account is configured. Both fields are optional; if neither is set and the order has missing SKUs the upload fails with a clear error explaining both options."
 }

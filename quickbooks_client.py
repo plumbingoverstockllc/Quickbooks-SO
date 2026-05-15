@@ -545,6 +545,58 @@ class QuickBooksClient:
         )
         return existing
 
+    def _add_non_inventory_item(
+        self,
+        name: str,
+        desc: str,
+        income_account: str,
+    ) -> tuple[bool, str]:
+        """Create a Non-Inventory item in QuickBooks.
+
+        Returns (success, status_message). Caller is already inside an active
+        BeginSession.
+        """
+        name_clean = html.escape((name or "").strip())
+        desc_clean = html.escape((desc or "").strip())
+        income_clean = html.escape((income_account or "").strip())
+        if not name_clean or not income_clean:
+            return False, "missing name or income account"
+        # QBXML schema: ItemNonInventoryAdd requires Name + IsActive; the
+        # SalesOrPurchase block requires AccountRef. Price omitted on purpose
+        # so the item has no default rate — each SO line still carries its
+        # own rate.
+        req_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <ItemNonInventoryAdd>
+      <Name>{name_clean}</Name>
+      <IsActive>true</IsActive>
+      <SalesOrPurchase>
+        <Desc>{desc_clean}</Desc>
+        <AccountRef><FullName>{income_clean}</FullName></AccountRef>
+      </SalesOrPurchase>
+    </ItemNonInventoryAdd>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(req_xml)
+        except Exception as exc:
+            log.exception("_add_non_inventory_item: ProcessRequest raised for %r", name)
+            return False, f"SDK error: {exc}"
+        try:
+            root = ET.fromstring(response)
+        except ET.ParseError as exc:
+            return False, f"could not parse response: {exc}"
+        rs = root.find(".//ItemNonInventoryAddRs")
+        if rs is None:
+            return False, "no ItemNonInventoryAddRs in response"
+        status_code = rs.attrib.get("statusCode", "")
+        status_message = rs.attrib.get("statusMessage", "")
+        if status_code != "0":
+            return False, f"{status_code}: {status_message}"
+        return True, "ok"
+
     def upload_sales_order(
         self,
         customer_name: str,
@@ -557,6 +609,7 @@ class QuickBooksClient:
         lines: Iterable[dict],
         tax_code: str,
         fallback_item: str = "",
+        income_account: str = "",
     ) -> str:
         self.connect()
         try:
@@ -610,43 +663,101 @@ class QuickBooksClient:
 
             # Pre-flight: which SKUs actually exist in the QuickBooks item list?
             # Missing items would otherwise fail the whole SalesOrderAdd with
-            # error 3140. If a fallback_item is configured we substitute it in
-            # place and annotate the description; otherwise we raise a clear
-            # error listing the missing SKUs and explaining how to fix it.
+            # error 3140. Two recovery modes, preferred in this order:
+            #   1. If a Default Income Account is configured, auto-create each
+            #      missing SKU as a Non-Inventory item under that account
+            #      using the description from the source data. This keeps each
+            #      SKU unique in the QuickBooks item list.
+            #   2. Otherwise, if a Fallback Item is set, substitute that
+            #      ItemRef in place and stamp the original SKU into the line
+            #      description.
+            #   3. If neither is set, fail with a clear message listing the
+            #      missing SKUs.
             raw_skus = [row["sku_raw"] for row in line_rows if row["sku_raw"]]
             existing_items = self._query_existing_items(raw_skus)
             missing_skus = sorted({s for s in raw_skus if s not in existing_items})
             fallback_clean = _clean(fallback_item)
+            income_clean = (income_account or "").strip()
             if missing_skus:
-                if not fallback_clean:
+                if income_clean:
+                    log.info(
+                        "upload_sales_order: auto-creating %d missing item(s) under income account %r",
+                        len(missing_skus),
+                        income_clean,
+                    )
+                    # Build a SKU -> description map from the input lines so the
+                    # newly-created items get a useful default description.
+                    desc_by_sku: dict[str, str] = {}
+                    for row in line_rows:
+                        s = row["sku_raw"]
+                        if s and s not in desc_by_sku:
+                            desc_by_sku[s] = row.get("desc", "")
+                    created: list[str] = []
+                    failed: list[tuple[str, str]] = []
+                    for sku in missing_skus:
+                        ok, msg = self._add_non_inventory_item(
+                            name=sku,
+                            desc=desc_by_sku.get(sku, ""),
+                            income_account=income_clean,
+                        )
+                        if ok:
+                            created.append(sku)
+                            existing_items.add(sku)
+                        else:
+                            failed.append((sku, msg))
+                            log.error(
+                                "upload_sales_order: could not auto-create item %r: %s",
+                                sku,
+                                msg,
+                            )
+                    log.info(
+                        "upload_sales_order: created %d / %d missing item(s); %d failed",
+                        len(created),
+                        len(missing_skus),
+                        len(failed),
+                    )
+                    if failed:
+                        first = "; ".join(f"{s} -> {m}" for s, m in failed[:5])
+                        raise RuntimeError(
+                            f"Could not auto-create {len(failed)} item(s) in QuickBooks. "
+                            f"Verify that the Default Income Account '{income_clean}' "
+                            f"exists in QuickBooks's Chart of Accounts and is an Income-type "
+                            f"account.\n\nFirst failures: {first}"
+                        )
+                    # After auto-create the missing list is now empty for the
+                    # purposes of substitution below.
+                    missing_skus = []
+                elif fallback_clean:
+                    if fallback_item.strip() not in self._query_existing_items([fallback_item.strip()]):
+                        raise RuntimeError(
+                            f"Fallback Item {fallback_item!r} does not exist in QuickBooks. "
+                            f"Set Fallback Item in the Configuration card to a real item name."
+                        )
+                    log.warning(
+                        "upload_sales_order: substituting %d missing SKU(s) with fallback %r: %s",
+                        len(missing_skus),
+                        fallback_item.strip(),
+                        ", ".join(missing_skus[:20]),
+                    )
+                else:
                     log.error(
-                        "upload_sales_order: %d SKU(s) not in QuickBooks item list and no Fallback Item set: %s",
+                        "upload_sales_order: %d SKU(s) not in QuickBooks item list and no recovery configured: %s",
                         len(missing_skus),
                         ", ".join(missing_skus[:20]),
                     )
                     raise RuntimeError(
-                        f"{len(missing_skus)} item(s) in this sales order do not exist in QuickBooks "
-                        f"and no Fallback Item is set:\n\n  "
+                        f"{len(missing_skus)} item(s) in this sales order do not exist in QuickBooks:\n\n  "
                         + ", ".join(missing_skus[:20])
                         + ("\n  ..." if len(missing_skus) > 20 else "")
-                        + "\n\nSet 'Fallback Item' in the Configuration card to the name of a "
-                        "QuickBooks item this app can use as a stand-in for missing SKUs "
-                        "(the original SKU will be added to the line description), or add "
-                        "the missing items to QuickBooks first."
+                        + "\n\nFix this one of two ways in the Configuration card:\n"
+                        "  - Set 'Default Income Account' to the name of an income account in "
+                        "your QuickBooks Chart of Accounts (e.g. 'Sales' or 'Sales Income'). "
+                        "The app will then auto-create each missing SKU as a Non-Inventory "
+                        "item under that account, preserving each unique SKU.\n"
+                        "  - OR set 'Fallback Item' to the name of an existing generic "
+                        "QuickBooks item, and missing SKUs will be lumped under it with the "
+                        "original SKU stamped into the line description."
                     )
-                # Verify the fallback itself exists, otherwise the substitution
-                # just trades one 3140 for another.
-                if fallback_clean and fallback_item.strip() not in self._query_existing_items([fallback_item.strip()]):
-                    raise RuntimeError(
-                        f"Fallback Item {fallback_item!r} does not exist in QuickBooks. "
-                        f"Set Fallback Item in the Configuration card to a real item name."
-                    )
-                log.warning(
-                    "upload_sales_order: substituting %d missing SKU(s) with fallback %r: %s",
-                    len(missing_skus),
-                    fallback_item.strip(),
-                    ", ".join(missing_skus[:20]),
-                )
 
             line_xml = []
             for row in line_rows:

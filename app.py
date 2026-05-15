@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.800 Beta"
+APP_VERSION = "v0.9.801 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -434,6 +434,7 @@ class SalesOrderApp:
         self.tax_code_var = tk.StringVar(value=self.settings.get("tax_code", "TAX"))
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.fallback_item_var = tk.StringVar(value=self.settings.get("fallback_item", ""))
+        self.income_account_var = tk.StringVar(value=self.settings.get("income_account", ""))
         # Default ON: auto-connect on every launch. If the attach fails the
         # status pill just shows "Not Connected" and the user can click
         # Connect manually. The user can opt out by setting
@@ -1145,6 +1146,7 @@ class SalesOrderApp:
             "tax_code": self.tax_code_var.get().strip(),
             "qb_company_file_path": self.qb_company_file_var.get().strip(),
             "fallback_item": self.fallback_item_var.get().strip(),
+            "income_account": self.income_account_var.get().strip(),
             "auto_connect_on_startup": self.auto_connect_on_startup,
             "pricing_mode": self.pricing_mode,
             "use_actual_cost": self.use_actual_cost,
@@ -1208,9 +1210,17 @@ class SalesOrderApp:
 
         self._form_entry(
             form,
-            "Fallback Item (used in place of any SKU that doesn't exist in QuickBooks)",
-            self.fallback_item_var,
+            "Default Income Account (auto-creates missing SKUs as Non-Inventory items under this account)",
+            self.income_account_var,
             5,
+            0,
+            6,
+        )
+        self._form_entry(
+            form,
+            "Fallback Item (used only if Default Income Account is empty; lumps missing SKUs under one item)",
+            self.fallback_item_var,
+            7,
             0,
             6,
         )
@@ -1878,6 +1888,7 @@ class SalesOrderApp:
                 lines=self.output_df.to_dict(orient="records"),
                 tax_code=self.tax_code_var.get().strip() or "TAX",
                 fallback_item=self.fallback_item_var.get().strip(),
+                income_account=self.income_account_var.get().strip(),
             )
             log.info("Upload to QuickBooks: success — %s", result)
             self._set_qb_status("Connected", state="connected")
