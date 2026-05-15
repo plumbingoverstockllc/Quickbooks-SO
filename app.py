@@ -33,7 +33,11 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.001 Beta"
+APP_VERSION = "v1.002 Beta"
+# Features still being tested are gated on this flag. The string baked into
+# APP_VERSION is the single source of truth: any build whose version label
+# contains "Beta" shows beta-only UI; stable builds hide it.
+IS_BETA = "beta" in APP_VERSION.lower()
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 BETA_UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/beta.json"
@@ -1114,6 +1118,89 @@ class SalesOrderApp:
         self._set_status("Checking for updates...")
         self.check_for_updates(silent=True)
 
+    def _show_created_items_report(self, upload_message: str, created: list[dict]) -> None:
+        """Display a report listing every item the upload had to create in
+        QuickBooks. Triggered only on beta builds.
+        """
+        c = UI
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Sales Order Uploaded")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("640x460")
+        try:
+            dlg.minsize(520, 380)
+        except tk.TclError:
+            pass
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        accent = tk.Frame(dlg, bg=c["accent"], height=3)
+        accent.pack(fill="x", side="top")
+
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
+
+        tk.Label(
+            body,
+            text=upload_message,
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+            wraplength=580,
+            justify="left",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text=f"{len(created)} new item(s) were created in QuickBooks during this upload:",
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+            wraplength=580,
+            justify="left",
+        ).pack(fill="x", pady=(6, 10))
+
+        table_wrap = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
+        table_wrap.pack(fill="both", expand=True)
+
+        cols = ("sku", "description")
+        tree = ttk.Treeview(table_wrap, columns=cols, show="headings", height=10)
+        tree.heading("sku", text="SKU")
+        tree.heading("description", text="Description")
+        tree.column("sku", width=180, anchor="w", stretch=False)
+        tree.column("description", width=420, anchor="w", stretch=True)
+        for item in created:
+            tree.insert("", "end", values=(item.get("sku", ""), item.get("description", "")))
+        sb = ttk.Scrollbar(table_wrap, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        def copy_to_clipboard() -> None:
+            text = "SKU\tDescription\n" + "\n".join(
+                f"{item.get('sku', '')}\t{item.get('description', '')}" for item in created
+            )
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", pady=(12, 0))
+        ttk.Button(button_row, text="Close", command=dlg.destroy, style="Quiet.TButton").pack(side="right")
+        ttk.Button(button_row, text="Copy as Table", command=copy_to_clipboard, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+
+        dlg.update_idletasks()
+        try:
+            self.root.update_idletasks()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            dw, dh = dlg.winfo_width(), dlg.winfo_height()
+            dlg.geometry(f"+{rx + (rw - dw) // 2}+{ry + (rh - dh) // 2}")
+        except tk.TclError:
+            pass
+
     def _clean_release_notes(self, notes: str) -> str:
         """Strip technical noise (markdown markers, SHA256 line, headers) so
         the notes render as plain prose in the update dialog."""
@@ -1442,11 +1529,12 @@ class SalesOrderApp:
             3,
             3,
         )
-        ttk.Checkbutton(
-            form,
-            text="Group line items by room (Beta - reads column L of the source file as the room name)",
-            variable=self.room_grouping_var,
-        ).grid(row=7, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 4))
+        if IS_BETA:
+            ttk.Checkbutton(
+                form,
+                text="Group line items by room (Beta - reads column L of the source file as the room name)",
+                variable=self.room_grouping_var,
+            ).grid(row=7, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 4))
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -2113,7 +2201,8 @@ class SalesOrderApp:
             len(self.output_df),
         )
         try:
-            result = self._qb_client().upload_sales_order(
+            client = self._qb_client()
+            result = client.upload_sales_order(
                 customer_name=self.customer_var.get().strip(),
                 sales_order_no=self.sales_order_no_var.get().strip(),
                 txn_date=self._normalize_date_for_qb(self.sales_order_date_var.get().strip()),
@@ -2125,12 +2214,16 @@ class SalesOrderApp:
                 tax_code=self.tax_code_var.get().strip() or "TAX",
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
-                group_by_room=bool(self.room_grouping_var.get()),
+                group_by_room=bool(self.room_grouping_var.get()) and IS_BETA,
             )
             log.info("Upload to QuickBooks: success — %s", result)
             self._set_qb_status("Connected", state="connected")
             self._set_status("Sales order uploaded to QuickBooks successfully.")
-            messagebox.showinfo("QuickBooks Upload", result)
+            created = list(getattr(client, "last_created_items", []) or [])
+            if IS_BETA and created:
+                self._show_created_items_report(result, created)
+            else:
+                messagebox.showinfo("QuickBooks Upload", result)
         except Exception as exc:
             log.error("Upload to QuickBooks: failed — %s", exc)
             log.debug("Upload traceback:\n%s", traceback.format_exc())

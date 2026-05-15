@@ -242,6 +242,10 @@ class QuickBooksClient:
         self.company_file_path = _normalize_company_path(company_file_path)
         self._rp = None
         self._ticket = None
+        # Populated by upload_sales_order with metadata about each item the
+        # upload had to auto-create. The caller reads this after the call
+        # to show a report.
+        self.last_created_items: list[dict] = []
 
     def connect(self) -> None:
         log.info("connect(): app_name=%r, company_file_path=%r", self.app_name, self.company_file_path)
@@ -623,6 +627,7 @@ class QuickBooksClient:
         income_account: str = "",
         group_by_room: bool = False,
     ) -> str:
+        self.last_created_items = []
         self.connect()
         try:
             def _clean(text: str) -> str:
@@ -708,14 +713,20 @@ class QuickBooksClient:
                     created: list[str] = []
                     failed: list[tuple[str, str]] = []
                     for sku in missing_skus:
+                        line_desc = desc_by_sku.get(sku, "")
                         ok, msg = self._add_non_inventory_item(
                             name=sku,
-                            desc=desc_by_sku.get(sku, ""),
+                            desc=line_desc,
                             income_account=income_clean,
                         )
                         if ok:
                             created.append(sku)
                             existing_items.add(sku)
+                            self.last_created_items.append({
+                                "sku": sku,
+                                "description": line_desc,
+                                "income_account": income_clean,
+                            })
                         else:
                             failed.append((sku, msg))
                             log.error(
