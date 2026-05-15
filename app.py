@@ -33,7 +33,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.003"
+APP_VERSION = "v1.004"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -453,6 +453,7 @@ class SalesOrderApp:
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.fallback_item_var = tk.StringVar(value=self.settings.get("fallback_item", ""))
         self.income_account_var = tk.StringVar(value=self.settings.get("income_account", ""))
+        self.sales_tax_item_var = tk.StringVar(value=self.settings.get("sales_tax_item", ""))
         self.room_grouping_var = tk.BooleanVar(value=bool(self.settings.get("room_grouping_enabled", False)))
         # Default ON: auto-connect on every launch. If the attach fails the
         # status pill just shows "Not Connected" and the user can click
@@ -1475,6 +1476,7 @@ class SalesOrderApp:
             "qb_company_file_path": self.qb_company_file_var.get().strip(),
             "fallback_item": self.fallback_item_var.get().strip(),
             "income_account": self.income_account_var.get().strip(),
+            "sales_tax_item": self.sales_tax_item_var.get().strip(),
             "room_grouping_enabled": bool(self.room_grouping_var.get()),
             "auto_connect_on_startup": self.auto_connect_on_startup,
             "pricing_mode": self.pricing_mode,
@@ -1558,6 +1560,15 @@ class SalesOrderApp:
         # **ROOM** header line plus blank separators between groups. The
         # room_grouping_var stays defined for settings backward-compatibility
         # but is no longer surfaced as a checkbox.
+
+        self._form_entry(
+            form,
+            "Sales Tax Item (the QuickBooks tax item name, e.g. 'CA Tax' or 'Out of State')",
+            self.sales_tax_item_var,
+            7,
+            0,
+            6,
+        )
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -2235,6 +2246,7 @@ class SalesOrderApp:
                 memo=self.memo_var.get().strip(),
                 lines=self.output_df.to_dict(orient="records"),
                 tax_code=self.tax_code_var.get().strip() or "TAX",
+                sales_tax_item=self.sales_tax_item_var.get().strip(),
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
                 group_by_room=True,

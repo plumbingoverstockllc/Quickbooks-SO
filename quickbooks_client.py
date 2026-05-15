@@ -626,6 +626,7 @@ class QuickBooksClient:
         fallback_item: str = "",
         income_account: str = "",
         group_by_room: bool = False,
+        sales_tax_item: str = "",
     ) -> str:
         self.last_created_items = []
         self.connect()
@@ -907,6 +908,16 @@ class QuickBooksClient:
             if tax_code:
                 parts.append(
                     f"<CustomerSalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></CustomerSalesTaxCodeRef>"
+                )
+            # ItemSalesTaxRef is the *rate* (e.g. "CA Tax 9.75%" or "Out of
+            # State 0%"). Some QuickBooks files reject the SalesOrderAdd with
+            # error 3180 "The Transaction Sales Tax field cannot be left
+            # blank, even for non-taxable customers..." when this is missing,
+            # so we emit it whenever the user has configured a Sales Tax Item
+            # in the Configuration card.
+            if sales_tax_item:
+                parts.append(
+                    f"<ItemSalesTaxRef><FullName>{_clean(sales_tax_item)}</FullName></ItemSalesTaxRef>"
                 )
             parts.append("".join(line_xml))
 

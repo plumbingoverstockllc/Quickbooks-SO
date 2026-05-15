@@ -1,6 +1,6 @@
 {
-  "version": "1.003",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.003/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "21c7ab03302070a8a0fc79bb9cfe4f1806ca4224231fd3019350a5e8db1465dd",
-  "notes": "Uploaded sales orders now set the order-level tax code automatically, so the header Tax field is filled in instead of defaulting to None. No more flipping it manually after each upload."
+  "version": "1.004",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.004/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "d4adcf00e801243c297e78e922235788eeac3b65a9694c6e91c4ac845068ddc4",
+  "notes": "Adds a 'Sales Tax Item' field in the Configuration card. Set it to your QuickBooks tax item name (for example 'CA Tax' or 'Out of State') and the upload fills that in on every sales order. Fixes the 'Transaction Sales Tax field cannot be left blank' error on QuickBooks files that require a tax rate on every order."
 }
