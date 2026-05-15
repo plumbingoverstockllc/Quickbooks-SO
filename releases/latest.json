@@ -1,6 +1,6 @@
 {
-  "version": "0.9.710",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.710/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "dbe3b074f93ec9789d8ba3250b457c15c0b72add9e20141051e3599b9c9f17d8",
-  "notes": "Connect no longer treats QuickBooks's own SDK helper (the qbw.exe whose window title is 'DDE Server Window') as a duplicate QuickBooks instance, and no longer refuses to attach when this app is running elevated. UI accent recolored from red/pink to blue/black."
+  "version": "0.9.711",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.711/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "391d50edfdce6166f84085a067d097ff17d054671aac6de3c84ae175521b77e9",
+  "notes": "Auto-connect on startup is now ON by default. Previous releases gated it behind a successful first manual connect, which never flipped because the v0.9.707-v0.9.709 process/elevation gates were blocking the attach itself. Set 'auto_connect_on_startup' to false in settings.json to opt out."
 }
