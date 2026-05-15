@@ -267,86 +267,18 @@ class QuickBooksClient:
             self.close()
             raise RuntimeError(f"QuickBooks OpenConnection2 failed: {exc}")
 
-        qb_details = _quickbooks_process_details()
-        qb_already_running = len(qb_details) > 0
-        log.info("connect(): QB process detected = %s (count=%d)", qb_already_running, len(qb_details))
+        # Process-detection via tasklist is unreliable: a non-elevated app
+        # cannot see processes from other users or elevated processes, which
+        # produced false "QB process detected = False" results. The SDK
+        # itself is the authoritative source — BeginSession("") is *safe*
+        # (it can only attach or fail, never spawn QB) so we just call it
+        # directly and let the SDK tell us the truth. The tasklist scan is
+        # kept only for the context-note diagnostics on errors.
         app_elevation = _current_process_elevation()
+        log.info("connect(): app elevation=%s", app_elevation)
 
-        # Hard safety gate: do not call BeginSession in ambiguous process states.
-        # This avoids any chance of side effects when QuickBooks has multiple
-        # running processes/windows with mixed contexts.
-        if not qb_already_running:
-            context_note = _runtime_context_note()
-            log.error("connect(): QuickBooks is not running; attach-only mode, no launch fallback")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "QuickBooks Desktop is not running. This app is configured to attach only and "
-                "will never launch/open QuickBooks automatically.\n\n"
-                f"Context: {context_note}"
-            )
-
-        # Real-instance check: refuse only when there are genuinely multiple
-        # *user-facing* QuickBooks UI processes (DDE Server helpers were
-        # already filtered out in _quickbooks_process_details). One main
-        # company-file window + the SDK helper is the normal steady state.
-        if len(qb_details) > 1:
-            context_note = _runtime_context_note()
-            log.error("connect(): multiple user-facing QuickBooks UI processes detected; refusing attach")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "Multiple QuickBooks windows are open. This app will not attempt to connect "
-                "until only one QuickBooks instance remains.\n\n"
-                "Close all QuickBooks windows, reopen one company file, then retry.\n\n"
-                f"Context: {context_note}"
-            )
-
-        # Elevation is reported but no longer used to refuse the attach. The
-        # working v0.9.708 attach succeeded in non-elevated mode; elevation is
-        # left as informational diagnostic so the log still captures it when an
-        # attach actually fails later.
-        if app_elevation == "elevated":
-            log.warning(
-                "connect(): app is elevated; QuickBooks may surface a UAC permission prompt or "
-                "spawn an additional window. Proceeding with attach attempt anyway."
-            )
-        mismatched = [
-            row for row in qb_details if row.get("elevation") not in ("unknown", app_elevation)
-        ]
-        if mismatched:
-            log.warning(
-                "connect(): QuickBooks/app UAC elevation mismatch (%s vs %s). Attach may fail.",
-                mismatched[0].get("elevation"),
-                app_elevation,
-            )
-
-        if _has_no_company_open_window():
-            context_note = _runtime_context_note()
-            log.error("connect(): QuickBooks is at 'No Company Open'; refusing BeginSession")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "QuickBooks is currently at 'No Company Open'. This app will not attempt "
-                "BeginSession in this state to avoid opening/spawning additional QuickBooks "
-                "windows.\n\nOpen the target company file in QuickBooks first, then retry.\n\n"
-                f"Context: {context_note}"
-            )
-
-        if _has_secondary_window_title():
-            context_note = _runtime_context_note()
-            log.error("connect(): QuickBooks has a Secondary window title; refusing BeginSession")
-            log.error("connect(): context diagnostics: %s", context_note)
-            self.close()
-            raise RuntimeError(
-                "QuickBooks shows a Secondary window/session. Connection is blocked to avoid "
-                "triggering additional QuickBooks windows.\n\n"
-                "Close all QuickBooks windows/processes, then open only one company window and retry.\n\n"
-                f"Context: {context_note}"
-            )
-
-        # Single safe attach attempt only. Do not cascade retries after one SDK
-        # failure, because retries can worsen unstable QB/network state.
+        # Step 1: try to attach to a running session. This call cannot launch
+        # QuickBooks. If QB is open with a company file, this succeeds.
         attach_error = None
         try:
             log.debug("connect(): BeginSession(path='', mode=2)")
@@ -357,25 +289,82 @@ class QuickBooksClient:
             attach_error = exc
             log.warning("connect(): BeginSession(path='', mode=2) failed — %s", exc)
 
+        # Step 2: the attach failed. Decode the error and decide whether to
+        # fall back to launching QB via the saved .QBW path.
+        attach_text = str(attach_error).lower()
+        no_file_open_error = (
+            "-2147220457" in attach_text
+            or "data file is not open" in attach_text
+            or "must include the name of the data file" in attach_text
+        )
+
+        if no_file_open_error and self.company_file_path:
+            # No live session — let the SDK launch QuickBooks with the saved
+            # path. This is the legitimate "open QB for me" flow.
+            log.info(
+                "connect(): no current session; launching via saved path %r",
+                self.company_file_path,
+            )
+            launch_error = None
+            for open_mode in (2, 0, 1):
+                try:
+                    log.debug(
+                        "connect(): BeginSession(path=%r, mode=%d)",
+                        self.company_file_path,
+                        open_mode,
+                    )
+                    self._ticket = self._rp.BeginSession(self.company_file_path, open_mode)
+                    log.info("connect(): launched QB via saved path (mode=%d)", open_mode)
+                    return
+                except Exception as exc:
+                    log.warning(
+                        "connect(): BeginSession(path=%r, mode=%d) failed — %s",
+                        self.company_file_path,
+                        open_mode,
+                        exc,
+                    )
+                    if launch_error is None:
+                        launch_error = exc
+            context_note = _runtime_context_note()
+            log.error("connect(): all path-based launch modes failed: %s", launch_error)
+            log.error("connect(): context diagnostics: %s", context_note)
+            self.close()
+            raise RuntimeError(
+                "Could not launch QuickBooks Desktop using the saved .QBW path. "
+                "Open QuickBooks manually with your company file, then click Connect again.\n\n"
+                f"Attach details: {launch_error}\nContext: {context_note}"
+            )
+
+        # Step 3: the attach failed for a reason that isn't "no file open",
+        # OR there's no saved path. Surface the SDK error to the user.
         context_note = _runtime_context_note()
         log.error("connect(): context diagnostics: %s", context_note)
         self.close()
+
+        if no_file_open_error and not self.company_file_path:
+            raise RuntimeError(
+                "QuickBooks Desktop has no company file open, and no QuickBooks Company File "
+                "(.QBW) path is set in this app's Configuration card.\n\n"
+                "Either open QuickBooks with your company file first, or set the .QBW path in "
+                "Configuration so this app can open the file for you.\n\n"
+                f"Context: {context_note}"
+            )
+
         if _is_company_session_lost_error(attach_error):
             raise RuntimeError(
                 "QuickBooks lost access to the company session while this connection attempt was running "
                 "(SDK errors -2147220478 / -2147220469). This usually indicates a QuickBooks host/network "
-                "company-file instability, not an app launch fallback.\n\n"
+                "company-file instability.\n\n"
                 "In QuickBooks, resolve the connection-lost state first, reopen the company file, "
                 "then retry once stable.\n\n"
                 f"Attach details: {attach_error}\nContext: {context_note}"
             )
+
         raise RuntimeError(
-            "QuickBooks Desktop is running, but this app could not attach to the open "
-            "company file. This app will not launch/open QuickBooks as fallback.\n\n"
-            "Ensure QuickBooks is fully logged into the company file and running under the "
-            "same Windows user and UAC elevation level as this app.\n\n"
-            f"Attach details: {attach_error}"
-            f"\nContext: {context_note}"
+            "Could not attach to QuickBooks Desktop. Make sure QuickBooks is open with your "
+            "company file fully loaded, and that this app is running under the same Windows "
+            "user (and same UAC elevation level) as QuickBooks.\n\n"
+            f"Attach details: {attach_error}\nContext: {context_note}"
         )
 
     def close(self) -> None:
