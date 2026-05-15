@@ -1,6 +1,6 @@
 {
-  "version": "1.020b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.020b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "b36b0b3c4e9dfe578bbbf948ac37c91a2813e9ccecfbd6568e2f97d4cd79750a",
-  "notes": "The app now remembers the window size and position you resize to. Close it at any size and it comes back the same way next launch. The 70% default still applies on the very first run or if the saved size doesn't fit your current screen."
+  "version": "1.020",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.020/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6c24b7a344eb9bdc2f40dd9bec390f510d75ae6621c4170b01bcaeef6ac02e7c",
+  "notes": "No separate beta build in flight right now. This entry points to the stable release."
 }

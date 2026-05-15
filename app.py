@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.020b"
+APP_VERSION = "v1.020"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -435,8 +435,12 @@ class SalesOrderApp:
         if saved_geom and self._geometry_fits_screen(saved_geom, screen_w, screen_h):
             self.root.geometry(saved_geom)
         else:
-            win_w = max(960, int(screen_w * 0.70))
-            win_h = max(640, int(screen_h * 0.70))
+            # First-launch default: 80% width × 75% height so the Configuration
+            # card and Validation Messages column both fit without clipping.
+            # The user can resize and that size is persisted to settings.json
+            # via _on_close.
+            win_w = max(1100, int(screen_w * 0.80))
+            win_h = max(720, int(screen_h * 0.75))
             x = max(0, (screen_w - win_w) // 2)
             y = max(0, (screen_h - win_h) // 2)
             self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")

@@ -1,6 +1,6 @@
 {
-  "version": "1.011",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.011/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "c03f0eb8e469ac134557be83a46ec7c223ac86c06220f65e2d783814a0949c5b",
-  "notes": "Fixes how cost is computed for new QuickBooks items. The sales-order rate still comes from source column J (Price). The cost stamped onto each auto-created item is now MSRP times your brand multiplier, the same calculation that drives your dealer cost. Source column I is no longer used."
+  "version": "1.020",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.020/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6c24b7a344eb9bdc2f40dd9bec390f510d75ae6621c4170b01bcaeef6ac02e7c",
+  "notes": "Big UI refresh promoted to stable. Setup menu collects Connect, Admin Setup, Pricing Rules, and Export Template. Validation Messages now sit next to the form. Customer matches Source File width; dates have a calendar picker. Required fields turn red when blank. Upload button is green. App opens at a comfortable default size and remembers whatever size you resize to. Help > About credits Moshe Adelman and Shimiralabs."
 }
