@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.801 Beta"
+APP_VERSION = "v0.9.802 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -407,7 +407,11 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
-        self.root.geometry("1440x960")
+        self.root.geometry("1600x1040")
+        try:
+            self.root.minsize(1280, 800)
+        except tk.TclError:
+            pass
         self.root.minsize(1240, 820)
         self.style = ttk.Style()
         self.style.theme_use("clam")
@@ -1210,19 +1214,19 @@ class SalesOrderApp:
 
         self._form_entry(
             form,
-            "Default Income Account (auto-creates missing SKUs as Non-Inventory items under this account)",
+            "Default Income Account (auto-creates missing SKUs under this account)",
             self.income_account_var,
             5,
             0,
-            6,
+            3,
         )
         self._form_entry(
             form,
-            "Fallback Item (used only if Default Income Account is empty; lumps missing SKUs under one item)",
+            "Fallback Item (used only if Default Income Account is empty)",
             self.fallback_item_var,
-            7,
-            0,
-            6,
+            5,
+            3,
+            3,
         )
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")

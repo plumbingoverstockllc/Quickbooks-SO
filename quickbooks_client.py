@@ -556,27 +556,38 @@ class QuickBooksClient:
         Returns (success, status_message). Caller is already inside an active
         BeginSession.
         """
-        name_clean = html.escape((name or "").strip())
-        desc_clean = html.escape((desc or "").strip())
-        income_clean = html.escape((income_account or "").strip())
+        def _ascii(text: str) -> str:
+            s = str(text or "")
+            s = "".join(
+                ch for ch in s
+                if ch in "\t\n\r" or 0x20 <= ord(ch) <= 0x7E
+            )
+            s = s.replace("\r", " ").replace("\n", " ").strip()
+            return html.escape(s)
+
+        name_clean = _ascii(name)
+        desc_clean = _ascii(desc)
+        income_clean = _ascii(income_account)
         if not name_clean or not income_clean:
             return False, "missing name or income account"
-        # QBXML schema: ItemNonInventoryAdd requires Name + IsActive; the
-        # SalesOrPurchase block requires AccountRef. Price omitted on purpose
-        # so the item has no default rate — each SO line still carries its
-        # own rate.
+        # QBXML schema: each Add must be wrapped in a corresponding *Rq.
+        # ItemNonInventoryAdd requires Name + IsActive; the SalesOrPurchase
+        # block requires AccountRef. Price omitted on purpose so the item
+        # has no default rate -- each SO line still carries its own.
         req_xml = f"""<?xml version="1.0"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="continueOnError">
-    <ItemNonInventoryAdd>
-      <Name>{name_clean}</Name>
-      <IsActive>true</IsActive>
-      <SalesOrPurchase>
-        <Desc>{desc_clean}</Desc>
-        <AccountRef><FullName>{income_clean}</FullName></AccountRef>
-      </SalesOrPurchase>
-    </ItemNonInventoryAdd>
+    <ItemNonInventoryAddRq>
+      <ItemNonInventoryAdd>
+        <Name>{name_clean}</Name>
+        <IsActive>true</IsActive>
+        <SalesOrPurchase>
+          <Desc>{desc_clean}</Desc>
+          <AccountRef><FullName>{income_clean}</FullName></AccountRef>
+        </SalesOrPurchase>
+      </ItemNonInventoryAdd>
+    </ItemNonInventoryAddRq>
   </QBXMLMsgsRq>
 </QBXML>"""
         try:
