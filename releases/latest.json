@@ -1,6 +1,6 @@
 {
-  "version": "0.9.803",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.803/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "d5bb0d037a774a59126957b94ae0a00510eff6c1ce7611d092c370e8eac413a9",
-  "notes": "A cleaner Update Available dialog, with the version and what's new shown clearly and the technical hash hidden. Behind the scenes the build process is also faster."
+  "version": "1.000",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.000/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6a268c23e3c3b4820ef8aa737f09291e8cdc9fd05811f802f691ffdf09b46bfc",
+  "notes": "First stable release. Sales orders upload end-to-end: connection to QuickBooks, automatic creation of missing items, and a clean update dialog. No more Beta label."
 }
