@@ -1,6 +1,6 @@
 {
-  "version": "0.9.802",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.802/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "5f7e79c3531337d8c27e18a672052817ece44e18b505ccca5dc64796a8b3d3f9",
-  "notes": "Fixes auto-create of missing items: the ItemNonInventoryAdd request was missing its required ItemNonInventoryAddRq wrapper, which made every auto-create call fail with the generic XML parse error. Default window size bumped from 1440x960 to 1600x1040 (with a 1280x800 minimum) so the preview pane is no longer cramped after the new Configuration fields landed. The two missing-SKU fields (Default Income Account and Fallback Item) are now laid out side-by-side instead of stacked."
+  "version": "0.9.803",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.803/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "d5bb0d037a774a59126957b94ae0a00510eff6c1ce7611d092c370e8eac413a9",
+  "notes": "A cleaner Update Available dialog, with the version and what's new shown clearly and the technical hash hidden. Behind the scenes the build process is also faster."
 }

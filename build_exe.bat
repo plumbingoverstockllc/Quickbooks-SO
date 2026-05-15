@@ -14,7 +14,9 @@ REM at runtime — numpy 2.x reorganized its internals and the default PyInstall
 REM hook misses several C-extension submodules.
 set "COLLECT=--collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd"
 
-"%PY%" -m PyInstaller --noconfirm --windowed --name "QB Sales Order Converter" %COLLECT% app.py
+REM We only ship the --onefile build (installer.iss sources dist\*.exe).
+REM The earlier --onedir invocation was overwritten by --onefile anyway, so
+REM dropping it cuts the build time roughly in half.
 "%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "QB Sales Order Converter" %COLLECT% app.py
 
 if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (

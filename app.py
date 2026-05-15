@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.802 Beta"
+APP_VERSION = "v0.9.803 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -1033,10 +1033,7 @@ class SalesOrderApp:
                 self._set_status(f"Update check complete: {APP_VERSION} is current.")
                 return
 
-            prompt = f"New version available: v{latest_version}\nCurrent: {APP_VERSION}\n\nInstall now?"
-            if notes:
-                prompt = f"{prompt}\n\nRelease notes:\n{notes}"
-            if not messagebox.askyesno("Update Available", prompt):
+            if not self._show_update_dialog(latest_version, notes):
                 return
 
             self._download_and_run_update(download_url, sha256_hash)
@@ -1048,6 +1045,130 @@ class SalesOrderApp:
     def check_for_updates_on_startup(self) -> None:
         self._set_status("Checking for updates...")
         self.check_for_updates(silent=True)
+
+    def _clean_release_notes(self, notes: str) -> str:
+        """Strip technical noise (markdown markers, SHA256 line, headers) so
+        the notes render as plain prose in the update dialog."""
+        if not notes:
+            return ""
+        text = notes
+        # Remove SHA256 lines entirely — verification is automated, the user
+        # doesn't need to see the hash.
+        text = re.sub(r"SHA-?256[^\n]*", "", text, flags=re.IGNORECASE)
+        # Strip code spans, leaving the content.
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+        # Strip bold markers.
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        # Strip leading markdown headers (## Heading -> Heading).
+        text = re.sub(r"^\s*#{1,6}\s+", "", text, flags=re.MULTILINE)
+        # Collapse stray blank lines.
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    def _show_update_dialog(self, latest_version: str, notes: str) -> bool:
+        """Present a clean Update Available dialog. Returns True if user wants
+        to install, False otherwise."""
+        c = UI
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Update Available")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("520x440")
+        try:
+            dlg.minsize(440, 360)
+        except tk.TclError:
+            pass
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        decision = {"install": False}
+
+        accent_strip = tk.Frame(dlg, bg=c["accent"], height=3)
+        accent_strip.pack(fill="x", side="top")
+
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
+
+        tk.Label(
+            body,
+            text=f"Version {latest_version} is available",
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 16),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text=f"You're on {APP_VERSION}.",
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 12))
+
+        cleaned = self._clean_release_notes(notes)
+        if cleaned:
+            tk.Label(
+                body,
+                text="What's new",
+                bg=c["bg_window"],
+                fg=c["text_primary"],
+                font=("Segoe UI Semibold", 10),
+                anchor="w",
+            ).pack(fill="x")
+            text_wrap = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
+            text_wrap.pack(fill="both", expand=True, pady=(4, 12))
+            notes_text = tk.Text(
+                text_wrap,
+                wrap="word",
+                bg=c["bg_card"],
+                fg=c["text_primary"],
+                font=("Segoe UI", 10),
+                bd=0,
+                relief="flat",
+                padx=12,
+                pady=10,
+                height=10,
+            )
+            sb = ttk.Scrollbar(text_wrap, orient="vertical", command=notes_text.yview)
+            notes_text.configure(yscrollcommand=sb.set)
+            notes_text.insert("1.0", cleaned)
+            notes_text.configure(state="disabled")
+            notes_text.pack(side="left", fill="both", expand=True)
+            sb.pack(side="right", fill="y")
+
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom")
+
+        def install():
+            decision["install"] = True
+            dlg.destroy()
+
+        def cancel():
+            decision["install"] = False
+            dlg.destroy()
+
+        ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
+        ttk.Button(button_row, text="Install Update", command=install, style="Primary.TButton").pack(
+            side="right", padx=(0, 10)
+        )
+
+        dlg.protocol("WM_DELETE_WINDOW", cancel)
+        dlg.update_idletasks()
+        # Center over the main window.
+        try:
+            self.root.update_idletasks()
+            rx = self.root.winfo_rootx()
+            ry = self.root.winfo_rooty()
+            rw = self.root.winfo_width()
+            rh = self.root.winfo_height()
+            dw = dlg.winfo_width()
+            dh = dlg.winfo_height()
+            dlg.geometry(f"+{rx + (rw - dw) // 2}+{ry + (rh - dh) // 2}")
+        except tk.TclError:
+            pass
+
+        dlg.wait_window()
+        return decision["install"]
 
     def _download_and_run_update(self, url: str, expected_sha256: str) -> None:
         temp_dir = Path(tempfile.gettempdir()) / "qb_so_updates"
