@@ -1,6 +1,6 @@
 {
-  "version": "0.9.714",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.714/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "cddfe44d35bf0db295d76802b0b637a4d556e2c8a0150c6c591a83ffdd517142",
-  "notes": "Connect no longer relies on the tasklist-based 'is QuickBooks running?' check, which gave false negatives when QuickBooks was running under a different Windows user or elevation context. Connect now calls the SDK directly and lets it tell us the truth: attach first (cannot spawn QB), and only fall back to a path-based launch if the SDK explicitly says no company file is open."
+  "version": "0.9.715",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.715/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6bbc95fa248a7e7c102ea5b79b43eece88c2b0812deaca3eecd9047adb3b1505",
+  "notes": "Upload now sanitizes every SKU / description / customer name / memo: strips ASCII control characters (which break XML 1.0), collapses embedded newlines/tabs to spaces, and trims whitespace before escaping. The built XML is also validated locally with ElementTree before being sent to QuickBooks, so character-level XML breakage is caught with the exact offending location instead of QuickBooks's generic 'parsing error' (-2147220480). When the SDK rejects the upload, the FULL request XML is now logged (no 8 KB truncation) so the offending row is visible in Log > Open Log File."
 }

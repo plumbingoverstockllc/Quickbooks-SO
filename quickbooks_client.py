@@ -502,12 +502,31 @@ class QuickBooksClient:
     ) -> str:
         self.connect()
         try:
+            def _clean(text: str) -> str:
+                """Make a string safe for QBXML element content.
+
+                Strips ASCII control chars except tab/newline/CR (XML 1.0
+                disallows the rest), normalizes any embedded line breaks to
+                spaces, and trims surrounding whitespace. Then html-escapes
+                so the literal `<`, `>`, `&`, quotes are safe.
+                """
+                s = str(text or "")
+                s = "".join(ch for ch in s if ch == "\t" or ch >= " ")
+                s = s.replace("\r", " ").replace("\n", " ").strip()
+                return html.escape(s)
+
             line_xml = []
-            for line in lines:
-                sku = html.escape(str(line["Product/Service"]))
-                desc = html.escape(str(line["Product/Service Description"]))
-                qty = float(line["Product/Service Quantity"])
-                rate = float(line["Product/Service Rate"])
+            for idx, line in enumerate(lines, start=1):
+                try:
+                    sku = _clean(line["Product/Service"])
+                    desc = _clean(line["Product/Service Description"])
+                    qty = float(line["Product/Service Quantity"])
+                    rate = float(line["Product/Service Rate"])
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Line {idx} has invalid data ({exc}). Check the SKU, "
+                        f"description, quantity, and rate for that row before uploading."
+                    )
                 line_xml.append(
                     f"""
       <SalesOrderLineAdd>
@@ -515,7 +534,7 @@ class QuickBooksClient:
         <Desc>{desc}</Desc>
         <Quantity>{qty}</Quantity>
         <Rate>{rate}</Rate>
-        <SalesTaxCodeRef><FullName>{html.escape(tax_code)}</FullName></SalesTaxCodeRef>
+        <SalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></SalesTaxCodeRef>
       </SalesOrderLineAdd>"""
                 )
 
@@ -541,19 +560,19 @@ class QuickBooksClient:
                 len(line_xml),
             )
             parts: list[str] = [
-                f"<CustomerRef><FullName>{html.escape(customer_name)}</FullName></CustomerRef>",
+                f"<CustomerRef><FullName>{_clean(customer_name)}</FullName></CustomerRef>",
             ]
             if txn_date_iso:
                 parts.append(f"<TxnDate>{txn_date_iso}</TxnDate>")
-            parts.append(f"<RefNumber>{html.escape(sales_order_no)}</RefNumber>")
+            parts.append(f"<RefNumber>{_clean(sales_order_no)}</RefNumber>")
             if terms:
-                parts.append(f"<TermsRef><FullName>{html.escape(terms)}</FullName></TermsRef>")
+                parts.append(f"<TermsRef><FullName>{_clean(terms)}</FullName></TermsRef>")
             if due_date_iso:
                 parts.append(f"<DueDate>{due_date_iso}</DueDate>")
             if shipping_method:
-                parts.append(f"<ShipMethodRef><FullName>{html.escape(shipping_method)}</FullName></ShipMethodRef>")
+                parts.append(f"<ShipMethodRef><FullName>{_clean(shipping_method)}</FullName></ShipMethodRef>")
             if memo:
-                parts.append(f"<Memo>{html.escape(memo)}</Memo>")
+                parts.append(f"<Memo>{_clean(memo)}</Memo>")
             parts.append("".join(line_xml))
 
             request_xml = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -567,13 +586,35 @@ class QuickBooksClient:
     </SalesOrderAddRq>
   </QBXMLMsgsRq>
 </QBXML>"""
+
+            # Parse the XML locally before sending. If it doesn't parse here,
+            # QuickBooks can't possibly parse it — and ET tells us exactly
+            # which character/line is broken, which is far more useful than
+            # QB's "found an error when parsing" generic error.
+            try:
+                ET.fromstring(request_xml)
+            except ET.ParseError as parse_exc:
+                log.error(
+                    "upload_sales_order: locally-built XML is not well-formed (%s). "
+                    "This means a SKU or description likely contains characters that "
+                    "broke escaping.",
+                    parse_exc,
+                )
+                log.error("upload_sales_order: full XML being rejected locally:\n%s", request_xml)
+                raise RuntimeError(
+                    "The sales order XML built from this preview is not valid XML "
+                    "before it even reaches QuickBooks. A SKU or description "
+                    f"contains characters that broke escaping. Local parse error: {parse_exc}.\n\n"
+                    f"Full XML written to the log."
+                )
+
             try:
                 response = self._process(request_xml)
             except Exception:
-                # Surface the XML we attempted to send so the log shows exactly
-                # what the SDK rejected. Bounded length to keep the log readable.
-                preview = request_xml if len(request_xml) <= 8000 else request_xml[:8000] + "\n... [truncated]"
-                log.error("upload_sales_order: ProcessRequest raised; XML sent (preview):\n%s", preview)
+                # On any upload failure, dump the FULL XML to the log so the
+                # rejected row can be identified. Logs are rotated at 512 KB
+                # so even multi-hundred-line sales orders fit.
+                log.error("upload_sales_order: ProcessRequest raised; full XML sent:\n%s", request_xml)
                 raise
             root = ET.fromstring(response)
             add_rs = root.find(".//SalesOrderAddRs")
