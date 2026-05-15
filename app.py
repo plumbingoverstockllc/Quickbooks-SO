@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.017b"
+APP_VERSION = "v1.018b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -422,9 +422,21 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
-        self.root.geometry("1600x1040")
+        # Open at 70% of the available screen, centered. Falls back to a
+        # sensible default if winfo_screen* aren't usable yet.
         try:
-            self.root.minsize(1280, 800)
+            self.root.update_idletasks()
+            screen_w = self.root.winfo_screenwidth() or 1600
+            screen_h = self.root.winfo_screenheight() or 1040
+        except tk.TclError:
+            screen_w, screen_h = 1600, 1040
+        win_w = max(960, int(screen_w * 0.70))
+        win_h = max(640, int(screen_h * 0.70))
+        x = max(0, (screen_w - win_w) // 2)
+        y = max(0, (screen_h - win_h) // 2)
+        self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+        try:
+            self.root.minsize(960, 640)
         except tk.TclError:
             pass
         self.root.minsize(1240, 820)

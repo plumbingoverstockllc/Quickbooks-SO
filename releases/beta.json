@@ -1,6 +1,6 @@
 {
-  "version": "1.017b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.017b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "d35f001addafc85c403d59acb4f4eea04c66570f731f15ea972d60fe69ff92aa",
-  "notes": "Configuration card fits properly now. Customer is no longer oversized, the form gets 3/4 of the row, and Validation Messages still has a comfortable column on the right. All fields visible without clipping."
+  "version": "1.018b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.018b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "641c729e303c8397a38b73c1a30a8d2a28586a7f33e473ca9d3bb6fc5c0baf2c",
+  "notes": "App now opens at 70% of your screen size, centered, instead of a fixed 1600x1040 that was getting cut off on smaller displays. Minimum window size lowered too so the app still fits on shorter screens."
 }
