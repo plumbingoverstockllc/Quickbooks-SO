@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.016b"
+APP_VERSION = "v1.017b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1595,10 +1595,10 @@ class SalesOrderApp:
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
         config.pack(fill="x", padx=32, pady=(4, 8))
         # Two columns: form fields on the left, validation messages on the
-        # right. Weighted so the left side gets ~2/3 of the width and the
-        # validation panel takes the remaining ~1/3.
+        # right. v1.017b shifts the ratio to 3:1 so the form has enough
+        # room and Validation Messages still gets a comfortable column.
         config.columnconfigure(0, weight=3, uniform="cfg")
-        config.columnconfigure(1, weight=2, uniform="cfg")
+        config.columnconfigure(1, weight=1, uniform="cfg")
 
         config_left = ttk.Frame(config, style="Card.TFrame")
         config_left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
@@ -1657,26 +1657,25 @@ class SalesOrderApp:
 
         form = ttk.Frame(config_left, style="Card.TFrame")
         form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
-        # 24-column grid for finer width control. v1.015b widens Customer to
-        # match the Source File entry width (half of the form), shrinks
-        # Sales Order No, the dates, and the bottom-row text fields.
-        FORM_COLS = 24
+        # 16-column grid -- coarse enough that field spans land on clean
+        # boundaries without overflowing config_left's allocated width.
+        FORM_COLS = 16
         for i in range(FORM_COLS):
             form.columnconfigure(i, weight=1)
 
-        # Row 0/1: Customer (wide, half-width like Source File),
-        # Sales Order No (narrow), Fetch button (compact),
-        # Sales Order Date + picker, Due Date + picker.
-        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 12)
-        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 12, 3)
+        # Row 0/1: Customer (medium-wide), Sales Order No (narrow),
+        # Fetch button (compact), Sales Order Date + picker, Due Date +
+        # picker. Spans sum to 16.
+        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 6)
+        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 6, 2)
         ttk.Button(
             form,
             text="Fetch Next",
             command=self.fetch_next_so,
             style="Quiet.TButton",
-        ).grid(row=1, column=15, padx=4, sticky="ew", columnspan=2)
-        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 17, 3)
-        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 20, 4)
+        ).grid(row=1, column=8, padx=4, sticky="ew", columnspan=2)
+        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 10, 3)
+        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 13, 3)
 
         # Required fields used by both Build Preview and Upload. Each entry
         # gets a write trace on its var so typing clears the red error
@@ -1691,16 +1690,15 @@ class SalesOrderApp:
             var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
         # Row 3/4: Terms / Shipping Method / Currency / Tax Code /
-        # Default Income Account. v1.015b shrinks the small text fields
-        # (Terms, Currency, Tax Code) and gives the freed columns to
-        # Shipping Method and Default Income Account.
-        self._form_entry(form, "Terms", self.terms_var, 3, 0, 3)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 3, 6)
-        self._form_entry(form, "Currency", self.currency_var, 3, 9, 3)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 12, 3)
+        # Default Income Account. v1.017b: spans now sum to the new
+        # 16-column form width.
+        self._form_entry(form, "Terms", self.terms_var, 3, 0, 2)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 2, 4)
+        self._form_entry(form, "Currency", self.currency_var, 3, 6, 2)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 8, 2)
         # Default Income Account stays visible; Fallback Item removed in
         # v1.012 (income-account auto-create is the only recovery path now).
-        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 15, 9)
+        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 10, 6)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and

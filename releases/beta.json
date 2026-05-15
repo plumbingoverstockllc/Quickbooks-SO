@@ -1,6 +1,6 @@
 {
-  "version": "1.016b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.016b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "1ec46183b1dec7351629613afada26fd87b5ba8da753e89349b61af1ae122a3b",
-  "notes": "About dialog now shows the author and support contact: Created by Moshe Adelman. For help email hello@shimiralabs.com. Shimiralabs.com."
+  "version": "1.017b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.017b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "d35f001addafc85c403d59acb4f4eea04c66570f731f15ea972d60fe69ff92aa",
+  "notes": "Configuration card fits properly now. Customer is no longer oversized, the form gets 3/4 of the row, and Validation Messages still has a comfortable column on the right. All fields visible without clipping."
 }
