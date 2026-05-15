@@ -1,6 +1,6 @@
 {
-  "version": "1.012b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.012b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "f865122d326141bf32435a262a8b9cbbea2aaa678e8076ca39e1581ab74436b7",
-  "notes": "UI overhaul. Source File and Output File now sit side-by-side, the QB Company File and SaaSant Template rows are gone. Customer, Sales Order No, Fetch button, and Terms are smaller. Sales Order Date and Due Date each have a calendar popup. Memo and Fallback Item fields removed. Every button now has a visible outline and a soft shadow edge. The preview pane gets the reclaimed vertical space."
+  "version": "1.013b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.013b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "b0048b997f007935c8d0db2d1b9483c452338e41ecd5e0429950c31632cbfab8",
+  "notes": "New Setup menu in the menu bar holds Connect to QuickBooks Desktop, QuickBooks Admin Setup, Change Pricing Rules, and Export Template - those buttons no longer crowd the bottom of the window. Required fields (Customer, Sales Order No, Sales Order Date, Due Date) now light up red when you try to Build Preview or Upload while they're blank, and clear themselves the moment you type."
 }

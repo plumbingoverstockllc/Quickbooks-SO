@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.012b"
+APP_VERSION = "v1.013b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -634,6 +634,28 @@ class SalesOrderApp:
             foreground=[("disabled", c["text_tertiary"])],
         )
 
+        # Error variant used when a required field is empty at submit time.
+        # The border + background go red until the user types something or
+        # focuses out into a valid state.
+        self.style.configure(
+            "Error.TEntry",
+            fieldbackground=c["danger_bg"],
+            foreground=c["text_primary"],
+            bordercolor=c["danger"],
+            lightcolor=c["danger"],
+            darkcolor=c["danger"],
+            insertcolor=c["text_primary"],
+            borderwidth=2,
+            padding=(10, 8),
+            relief="solid",
+        )
+        self.style.map(
+            "Error.TEntry",
+            bordercolor=[("focus", c["danger"]), ("hover", c["danger"])],
+            lightcolor=[("focus", c["danger"]), ("hover", c["danger"])],
+            darkcolor=[("focus", c["danger"]), ("hover", c["danger"])],
+        )
+
         self.style.configure(
             "TButton",
             padding=(14, 9),
@@ -882,6 +904,25 @@ class SalesOrderApp:
     def _build_menu(self) -> None:
         c = UI
         menu_bar = tk.Menu(self.root, bg=c["bg_card"], fg=c["text_primary"], borderwidth=0)
+
+        setup_menu = tk.Menu(
+            menu_bar,
+            tearoff=0,
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            activebackground=c["accent"],
+            activeforeground="#FFFFFF",
+            borderwidth=0,
+            relief="flat",
+            font=("Segoe UI", 10),
+        )
+        setup_menu.add_command(label="Connect to QuickBooks Desktop", command=self.connect_quickbooks)
+        setup_menu.add_command(label="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide)
+        setup_menu.add_separator()
+        setup_menu.add_command(label="Change Pricing Rules", command=self.change_pricing_rules)
+        setup_menu.add_command(label="Export Template (Custom Path)", command=self.export_file)
+        menu_bar.add_cascade(label="Setup", menu=setup_menu)
+
         help_menu = tk.Menu(
             menu_bar,
             tearoff=0,
@@ -1542,16 +1583,28 @@ class SalesOrderApp:
 
         # Row 0/1: Customer (narrow), Sales Order No (narrow), Fetch button
         # (compact), Sales Order Date + picker, Due Date + picker.
-        self._form_entry(form, "Customer", self.customer_var, 0, 0, 3)
-        self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 3, 2)
+        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 3)
+        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 3, 2)
         ttk.Button(
             form,
             text="Fetch Next",
             command=self.fetch_next_so,
             style="Quiet.TButton",
         ).grid(row=1, column=5, padx=4, sticky="ew")
-        self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 6, 3)
-        self._date_entry(form, "Due Date", self.due_date_var, 0, 9, 3)
+        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 6, 3)
+        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 9, 3)
+
+        # Required fields used by both Build Preview and Upload. Each entry
+        # gets a write trace on its var so typing clears the red error
+        # state immediately.
+        self._required_fields = [
+            ("Customer", self.customer_var, customer_entry),
+            ("Sales Order No", self.sales_order_no_var, so_no_entry),
+            ("Sales Order Date", self.sales_order_date_var, so_date_entry),
+            ("Due Date", self.due_date_var, due_date_entry),
+        ]
+        for _, var, entry in self._required_fields:
+            var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
         # Row 3/4: Terms (narrow), Shipping Method, Currency, Tax Code.
         # Memo removed in v1.012.
@@ -1563,26 +1616,11 @@ class SalesOrderApp:
         # v1.012 (income-account auto-create is the only recovery path now).
         self._form_entry(form, "Default Income Account", self.income_account_var, 3, 9, 3)
 
+        # Bottom bar of the Configuration card — now just the QB status pill,
+        # since Connect/Admin Setup/Update commands moved to the Setup and
+        # Help menus in v1.013b.
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-        ttk.Button(
-            qb_bar,
-            text="Connect to QuickBooks Desktop",
-            command=self.connect_quickbooks,
-            style="Accent.TButton",
-        ).pack(side="left")
-        ttk.Button(
-            qb_bar,
-            text="QuickBooks Admin Setup",
-            command=self.show_qb_admin_setup_guide,
-            style="Quiet.TButton",
-        ).pack(side="left", padx=8)
-        ttk.Button(
-            qb_bar,
-            text="Check for Updates",
-            command=self.check_for_updates,
-            style="Quiet.TButton",
-        ).pack(side="left")
         self.qb_status_pill = tk.Frame(
             qb_bar,
             bg=c["bg_hover"],
@@ -1590,7 +1628,7 @@ class SalesOrderApp:
             highlightthickness=0,
             bd=0,
         )
-        self.qb_status_pill.pack(side="left", padx=12)
+        self.qb_status_pill.pack(side="left")
         self.qb_status_inner = tk.Label(
             self.qb_status_pill,
             textvariable=self.qb_status_var,
@@ -1603,15 +1641,11 @@ class SalesOrderApp:
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
 
+        # Action row: only the primary flow buttons remain here. Change
+        # Pricing Rules and Export Template moved to the Setup menu.
         actions = ttk.Frame(root, padding=(32, 4, 32, 10))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
-        ttk.Button(
-            actions,
-            text="Change Pricing Rules",
-            command=self.change_pricing_rules,
-            style="Quiet.TButton",
-        ).pack(side="left", padx=8)
         ttk.Button(
             actions,
             text="Export for SaaSant",
@@ -1620,16 +1654,10 @@ class SalesOrderApp:
         ).pack(side="left", padx=(8, 0))
         ttk.Button(
             actions,
-            text="Export Template (Custom Path)",
-            command=self.export_file,
-            style="Quiet.TButton",
-        ).pack(side="left", padx=8)
-        ttk.Button(
-            actions,
             text="Upload to QuickBooks",
             command=self.upload_to_quickbooks,
             style="Accent.TButton",
-        ).pack(side="left")
+        ).pack(side="left", padx=(8, 0))
 
         content = ttk.Panedwindow(root, orient="vertical")
         content.pack(fill="both", expand=True, padx=32, pady=(0, 8))
@@ -1724,6 +1752,30 @@ class SalesOrderApp:
         separator.pack(fill="x", side="top")
         ttk.Label(status_bar, textvariable=self.status_var, style="Status.TLabel").pack(anchor="w")
 
+    def _clear_field_error(self, entry) -> None:
+        """Reset an entry's style back to default TEntry. Safe to call on
+        an already-default entry."""
+        try:
+            entry.configure(style="TEntry")
+        except tk.TclError:
+            pass
+
+    def _validate_required_fields(self) -> list[str]:
+        """Mark blank required entries in red and return the list of label
+        names that failed. Empty list = all good."""
+        missing: list[str] = []
+        for label, var, entry in getattr(self, "_required_fields", []):
+            value = (var.get() or "").strip()
+            if value:
+                self._clear_field_error(entry)
+            else:
+                try:
+                    entry.configure(style="Error.TEntry")
+                except tk.TclError:
+                    pass
+                missing.append(label)
+        return missing
+
     def _path_row(self, parent, label, var, browse_cmd, row_idx):
         ttk.Label(parent, text=label, style="Card.TLabel", width=18).grid(
             row=row_idx, column=0, sticky="w", pady=(2, 2)
@@ -1754,9 +1806,11 @@ class SalesOrderApp:
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
             row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
         )
-        ttk.Entry(parent, textvariable=var).grid(
+        entry = ttk.Entry(parent, textvariable=var)
+        entry.grid(
             row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
+        return entry
 
     def _date_entry(self, parent, label, var, row, col, span):
         """Form entry like _form_entry but with a small 📅 picker button on
@@ -1767,7 +1821,8 @@ class SalesOrderApp:
         wrap = ttk.Frame(parent, style="Card.TFrame")
         wrap.grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4))
         wrap.columnconfigure(0, weight=1)
-        ttk.Entry(wrap, textvariable=var).grid(row=0, column=0, sticky="ew")
+        entry = ttk.Entry(wrap, textvariable=var)
+        entry.grid(row=0, column=0, sticky="ew")
         ttk.Button(
             wrap,
             text="📅",
@@ -1775,6 +1830,7 @@ class SalesOrderApp:
             command=lambda v=var: self._open_date_picker(v),
             style="Quiet.TButton",
         ).grid(row=0, column=1, sticky="e", padx=(4, 0))
+        return entry
 
     def _open_date_picker(self, var: tk.StringVar) -> None:
         """Tiny calendar popup. Reads the current value to seed the month,
@@ -2248,6 +2304,14 @@ class SalesOrderApp:
 
     def build_preview(self):
         try:
+            missing = self._validate_required_fields()
+            if missing:
+                messagebox.showwarning(
+                    "Required fields are blank",
+                    "Please fill in the following before building the preview:\n\n  - "
+                    + "\n  - ".join(missing),
+                )
+                return
             self._validate_settings()
             self.source_df = load_source(self.source_path_var.get().strip())
             self.output_overrides = {}
@@ -2484,6 +2548,14 @@ class SalesOrderApp:
         if self.output_df is None or self.output_df.empty:
             log.warning("Upload to QuickBooks: aborted — no preview data")
             messagebox.showwarning("No data", "Build preview first.")
+            return
+        missing = self._validate_required_fields()
+        if missing:
+            log.warning("Upload to QuickBooks: aborted — blank required fields: %s", missing)
+            messagebox.showwarning(
+                "Required fields are blank",
+                "Please fill in the following before uploading:\n\n  - " + "\n  - ".join(missing),
+            )
             return
         log.info(
             "Upload to QuickBooks: starting — customer=%r so=%r lines=%d",
