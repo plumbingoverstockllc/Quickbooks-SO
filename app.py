@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.015b"
+APP_VERSION = "v1.016b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -962,7 +962,16 @@ class SalesOrderApp:
         help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
         help_menu.add_command(label="Check for Beta Update", command=self.check_for_beta_update)
         help_menu.add_separator()
-        help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", f"{APP_NAME} {APP_VERSION}"))
+        help_menu.add_command(
+            label="About",
+            command=lambda: messagebox.showinfo(
+                "About",
+                f"{APP_NAME} {APP_VERSION}\n\n"
+                "Created by Moshe Adelman\n"
+                "For help email hello@shimiralabs.com\n"
+                "Shimiralabs.com",
+            ),
+        )
         menu_bar.add_cascade(label="Help", menu=help_menu)
 
         log_menu = tk.Menu(

@@ -1,6 +1,6 @@
 {
-  "version": "1.015b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.015b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "985cf5de39057d591b6619469ed2d14de6e61e6b1afd69298dee5383935b8031",
-  "notes": "Customer field is now wide (matches the Source File entry). Sales Order No, both dates, Terms, Currency, and Tax Code are smaller. When QuickBooks isn't connected the status pill now reads 'Go to Setup → Connect to QuickBooks Desktop to connect' so new users know where to start."
+  "version": "1.016b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.016b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "1ec46183b1dec7351629613afada26fd87b5ba8da753e89349b61af1ae122a3b",
+  "notes": "About dialog now shows the author and support contact: Created by Moshe Adelman. For help email hello@shimiralabs.com. Shimiralabs.com."
 }
