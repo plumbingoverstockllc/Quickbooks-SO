@@ -1,6 +1,6 @@
 {
-  "version": "0.9.711",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.711/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "391d50edfdce6166f84085a067d097ff17d054671aac6de3c84ae175521b77e9",
-  "notes": "Auto-connect on startup is now ON by default. Previous releases gated it behind a successful first manual connect, which never flipped because the v0.9.707-v0.9.709 process/elevation gates were blocking the attach itself. Set 'auto_connect_on_startup' to false in settings.json to opt out."
+  "version": "0.9.712",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.712/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "2f5b0effcfa0225b3fe313cdc96fc1baf2f1398c755b9a7b31cbbf6880b2238a",
+  "notes": "Refreshed look: larger blue app title with a thin accent strip across the top of the window, bigger section card headers, more breathing room around cards and action rows. Functional behavior unchanged from v0.9.711."
 }

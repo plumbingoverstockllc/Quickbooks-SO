@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.711 Beta"
+APP_VERSION = "v0.9.712 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -486,14 +486,20 @@ class SalesOrderApp:
         self.style.configure(
             "Header.TLabel",
             background=c["bg_window"],
-            foreground=c["text_primary"],
-            font=("Segoe UI Semibold", 18),
+            foreground=c["accent"],
+            font=("Segoe UI Semibold", 26),
+        )
+        self.style.configure(
+            "AppTitle.TLabel",
+            background=c["bg_window"],
+            foreground=c["accent"],
+            font=("Segoe UI Semibold", 28),
         )
         self.style.configure(
             "SubHeader.TLabel",
             background=c["bg_window"],
             foreground=c["text_secondary"],
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 11),
         )
         self.style.configure(
             "CardSubHeader.TLabel",
@@ -547,8 +553,8 @@ class SalesOrderApp:
             "Card.TLabelframe.Label",
             background=c["bg_card"],
             foreground=c["text_primary"],
-            font=("Segoe UI Semibold", 11),
-            padding=(8, 4),
+            font=("Segoe UI Semibold", 13),
+            padding=(10, 6),
         )
 
         self.style.configure(
@@ -1119,19 +1125,22 @@ class SalesOrderApp:
         root = self.root
         c = UI
 
-        header = ttk.Frame(root, padding=(26, 14, 26, 8))
+        accent_strip = tk.Frame(root, bg=c["accent"], height=4)
+        accent_strip.pack(fill="x", side="top")
+
+        header = ttk.Frame(root, padding=(32, 22, 32, 16))
         header.pack(fill="x")
         title_row = ttk.Frame(header)
         title_row.pack(fill="x")
-        ttk.Label(title_row, text="QB Sales Order Converter", style="Header.TLabel").pack(side="left")
+        ttk.Label(title_row, text="QB Sales Order Converter", style="AppTitle.TLabel").pack(side="left")
         ttk.Label(
             header,
             text=f"{APP_VERSION} · Upload source data, review mapped rows, then export or upload to QuickBooks Desktop.",
             style="SubHeader.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
+        ).pack(anchor="w", pady=(6, 0))
 
         config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
-        config.pack(fill="x", padx=26, pady=(2, 8))
+        config.pack(fill="x", padx=32, pady=(4, 10))
 
         self._path_row(config, "Source File", self.source_path_var, self._browse_source, 0)
         self._path_row(config, "SaaSant Template", self.template_path_var, self._browse_template, 1)
@@ -1202,7 +1211,7 @@ class SalesOrderApp:
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
 
-        actions = ttk.Frame(root, padding=(26, 2, 26, 8))
+        actions = ttk.Frame(root, padding=(32, 4, 32, 10))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
         ttk.Button(
@@ -1231,7 +1240,7 @@ class SalesOrderApp:
         ).pack(side="left")
 
         content = ttk.Panedwindow(root, orient="vertical")
-        content.pack(fill="both", expand=True, padx=26, pady=(0, 6))
+        content.pack(fill="both", expand=True, padx=32, pady=(0, 8))
 
         preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
         content.add(preview_frame, weight=12)
