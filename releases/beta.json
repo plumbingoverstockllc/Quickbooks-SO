@@ -1,6 +1,6 @@
 {
-  "version": "1.014b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.014b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "45f4bc886d648bf24a2fe15fdffe23cf7a10315f9255fb05584d9b25417096fa",
-  "notes": "Validation Messages now sit on the right side of the Configuration card instead of below the preview. The top strip is orange on beta builds and blue on stable so the channel is obvious at a glance. The Upload to QuickBooks button is now green."
+  "version": "1.015b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.015b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "985cf5de39057d591b6619469ed2d14de6e61e6b1afd69298dee5383935b8031",
+  "notes": "Customer field is now wide (matches the Source File entry). Sales Order No, both dates, Terms, Currency, and Tax Code are smaller. When QuickBooks isn't connected the status pill now reads 'Go to Setup → Connect to QuickBooks Desktop to connect' so new users know where to start."
 }

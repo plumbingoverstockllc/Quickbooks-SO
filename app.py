@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.014b"
+APP_VERSION = "v1.015b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -468,12 +468,12 @@ class SalesOrderApp:
         self.item_values: dict[str, float] = self.settings.get("item_values", {})
         self.line_values: dict[str, float] = self.settings.get("line_values", {})
         self.status_var = tk.StringVar(value="Ready. Load source file, then build preview.")
-        self.qb_status_var = tk.StringVar(value="Not Connected")
+        self.qb_status_var = tk.StringVar(value="Go to Setup → Connect to QuickBooks Desktop to connect")
         self.qb_status_label: ttk.Label | None = None
 
         self._build_layout()
         self._build_menu()
-        self._set_qb_status("Not Connected", state="disconnected")
+        self._set_qb_status(self._not_connected_message(), state="disconnected")
         self.root.after(400, self._warn_if_elevated)
         if self.auto_connect_on_startup:
             self.root.after(900, self._connect_quickbooks_on_startup)
@@ -1648,22 +1648,26 @@ class SalesOrderApp:
 
         form = ttk.Frame(config_left, style="Card.TFrame")
         form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
-        # 12 columns gives finer width control over the smaller fields.
-        for i in range(12):
+        # 24-column grid for finer width control. v1.015b widens Customer to
+        # match the Source File entry width (half of the form), shrinks
+        # Sales Order No, the dates, and the bottom-row text fields.
+        FORM_COLS = 24
+        for i in range(FORM_COLS):
             form.columnconfigure(i, weight=1)
 
-        # Row 0/1: Customer (narrow), Sales Order No (narrow), Fetch button
-        # (compact), Sales Order Date + picker, Due Date + picker.
-        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 3)
-        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 3, 2)
+        # Row 0/1: Customer (wide, half-width like Source File),
+        # Sales Order No (narrow), Fetch button (compact),
+        # Sales Order Date + picker, Due Date + picker.
+        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 12)
+        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 12, 3)
         ttk.Button(
             form,
             text="Fetch Next",
             command=self.fetch_next_so,
             style="Quiet.TButton",
-        ).grid(row=1, column=5, padx=4, sticky="ew")
-        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 6, 3)
-        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 9, 3)
+        ).grid(row=1, column=15, padx=4, sticky="ew", columnspan=2)
+        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 17, 3)
+        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 20, 4)
 
         # Required fields used by both Build Preview and Upload. Each entry
         # gets a write trace on its var so typing clears the red error
@@ -1677,15 +1681,17 @@ class SalesOrderApp:
         for _, var, entry in self._required_fields:
             var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
-        # Row 3/4: Terms (narrow), Shipping Method, Currency, Tax Code.
-        # Memo removed in v1.012.
-        self._form_entry(form, "Terms", self.terms_var, 3, 0, 2)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 2, 3)
-        self._form_entry(form, "Currency", self.currency_var, 3, 5, 2)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 7, 2)
+        # Row 3/4: Terms / Shipping Method / Currency / Tax Code /
+        # Default Income Account. v1.015b shrinks the small text fields
+        # (Terms, Currency, Tax Code) and gives the freed columns to
+        # Shipping Method and Default Income Account.
+        self._form_entry(form, "Terms", self.terms_var, 3, 0, 3)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 3, 6)
+        self._form_entry(form, "Currency", self.currency_var, 3, 9, 3)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 12, 3)
         # Default Income Account stays visible; Fallback Item removed in
         # v1.012 (income-account auto-create is the only recovery path now).
-        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 9, 3)
+        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 15, 9)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and
@@ -2068,6 +2074,11 @@ class SalesOrderApp:
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
 
+    def _not_connected_message(self) -> str:
+        """Status pill text when QuickBooks isn't connected. Points users at
+        the Setup menu so they know where the Connect action moved to."""
+        return "Go to Setup → Connect to QuickBooks Desktop to connect"
+
     def _set_qb_status(self, message: str, state: str = "disconnected") -> None:
         self.qb_status_var.set(message)
         c = UI
@@ -2144,7 +2155,7 @@ class SalesOrderApp:
             if not silent:
                 messagebox.showinfo("QuickBooks Connected", f"Connected successfully.\nCompany: {company_name}")
         except Exception as exc:
-            self._set_qb_status("Not Connected", state="disconnected")
+            self._set_qb_status(self._not_connected_message(), state="disconnected")
             error_text = str(exc)
             log.error("Connect QuickBooks: failed — %s", error_text)
             log.debug("Connect QuickBooks traceback:\n%s", traceback.format_exc())
