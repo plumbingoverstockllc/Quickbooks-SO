@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from quickbooks_client import QuickBooksClient
+from quickbooks_client import QuickBooksClient, _current_process_elevation
 from transformer import OrderSettings, line_pricing_keys, load_source, transform_to_template, unique_brands, unique_skus
 
 
@@ -25,7 +25,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v0.9.712 Beta"
+APP_VERSION = "v0.9.713 Beta"
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
@@ -451,11 +451,44 @@ class SalesOrderApp:
         self._build_layout()
         self._build_menu()
         self._set_qb_status("Not Connected", state="disconnected")
+        self.root.after(400, self._warn_if_elevated)
         if self.auto_connect_on_startup:
             self.root.after(900, self._connect_quickbooks_on_startup)
         else:
             log.info("Auto-connect on startup disabled")
         self.root.after(1200, self.check_for_updates_on_startup)
+
+    def _warn_if_elevated(self) -> None:
+        """Show a one-time warning if the app is running elevated.
+
+        QuickBooks Desktop is almost always launched as a standard user. If
+        this app is elevated, QBXMLRP2 cannot attach across the UAC boundary
+        and instead spawns a second elevated QuickBooks window, which fails
+        with -2147220457. The user has to relaunch this app non-elevated to
+        recover — this dialog tells them up front instead of making them
+        diagnose it from the log.
+        """
+        try:
+            elevation = _current_process_elevation()
+        except Exception:
+            log.exception("_warn_if_elevated: could not determine elevation")
+            return
+        log.info("Startup elevation check: %s", elevation)
+        if elevation != "elevated":
+            return
+        log.warning("Startup: app is elevated — showing relaunch warning to user")
+        self._set_qb_status("Elevated — relaunch as non-admin", state="disconnected")
+        messagebox.showwarning(
+            "Run as Administrator detected",
+            "This app is running as Administrator.\n\n"
+            "QuickBooks Desktop is typically running under your normal Windows user, "
+            "and the SDK cannot attach across that UAC boundary — connection will fail "
+            "and a second QuickBooks window will appear.\n\n"
+            "Close this app, then reopen it normally (not 'Run as administrator'):\n"
+            "  • Right-click the shortcut → Properties → Shortcut → Advanced…\n"
+            "  • Make sure 'Run as administrator' is UNCHECKED → OK.\n\n"
+            "Then relaunch the app and click Connect.",
+        )
 
     def _configure_styles(self) -> None:
         c = UI

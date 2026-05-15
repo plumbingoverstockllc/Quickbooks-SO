@@ -1,5 +1,5 @@
 #define MyAppName "QB Sales Order Converter"
-#define MyAppVersion "0.9.712-beta"
+#define MyAppVersion "0.9.713-beta"
 #define MyAppPublisher "Moshe Adelman DBA RunByItself.com"
 #define MyAppExeName "QB Sales Order Converter.exe"
 
@@ -37,7 +37,12 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait
+; runasoriginaluser: when the installer is elevated (which it always is, to
+; write to Program Files), launch the app under the *non-elevated* original
+; user token instead of inheriting the installer's admin token. Without this
+; flag, every update would relaunch the app as Administrator, which prevents
+; it from attaching to a normal-user QuickBooks session.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

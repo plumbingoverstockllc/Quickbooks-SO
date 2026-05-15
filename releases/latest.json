@@ -1,6 +1,6 @@
 {
-  "version": "0.9.712",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.712/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "2f5b0effcfa0225b3fe313cdc96fc1baf2f1398c755b9a7b31cbbf6880b2238a",
-  "notes": "Refreshed look: larger blue app title with a thin accent strip across the top of the window, bigger section card headers, more breathing room around cards and action rows. Functional behavior unchanged from v0.9.711."
+  "version": "0.9.713",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v0.9.713/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "c94f7fecc797a0371d1a37b56cb5cdcb0067b40814ced2e5169c0f6fe002263e",
+  "notes": "Installer now uses Inno Setup's 'runasoriginaluser' flag so the post-install app launch runs under your normal user token instead of inheriting the installer's admin token. This breaks the loop where every update relaunched the app as Administrator and prevented it from attaching to your normal-user QuickBooks. On startup the app now also shows a clear warning dialog if it detects it is running elevated."
 }
