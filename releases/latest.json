@@ -1,6 +1,6 @@
 {
-  "version": "1.001",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.001/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "138f269854bdfd2eae4993a8681131ede6c5b0cc852f996193097d6b83320c3c",
-  "notes": "Adds a Help menu entry to opt into Beta updates. Existing behavior is unchanged on this stable release. Install this update so future betas can be offered to you."
+  "version": "1.002",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "df37fb9ed947e0fdff5b13c30eb1283c25a91c2fbb0eaa7e9926ac8dbf98989e",
+  "notes": "Sales orders are now organized by room. The QuickBooks upload reads column L of the source file and adds a header line (**ROOM**) before each section with blank rows between, so the resulting order is grouped the way you build it. After upload, you also get a report listing any items the app had to create in QuickBooks during the run."
 }

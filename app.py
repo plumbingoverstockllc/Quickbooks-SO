@@ -33,7 +33,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.002b"
+APP_VERSION = "v1.002"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1553,12 +1553,11 @@ class SalesOrderApp:
             3,
             3,
         )
-        if IS_BETA:
-            ttk.Checkbutton(
-                form,
-                text="Group line items by room (Beta - reads column L of the source file as the room name)",
-                variable=self.room_grouping_var,
-            ).grid(row=7, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 4))
+        # Room grouping is always on in v1.002+. The source file's column L
+        # is read as the room name and the QuickBooks upload inserts a
+        # **ROOM** header line plus blank separators between groups. The
+        # room_grouping_var stays defined for settings backward-compatibility
+        # but is no longer surfaced as a checkbox.
 
         qb_bar = ttk.Frame(config, style="Card.TFrame")
         qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
@@ -2238,13 +2237,13 @@ class SalesOrderApp:
                 tax_code=self.tax_code_var.get().strip() or "TAX",
                 fallback_item=self.fallback_item_var.get().strip(),
                 income_account=self.income_account_var.get().strip(),
-                group_by_room=bool(self.room_grouping_var.get()) and IS_BETA,
+                group_by_room=True,
             )
             log.info("Upload to QuickBooks: success — %s", result)
             self._set_qb_status("Connected", state="connected")
             self._set_status("Sales order uploaded to QuickBooks successfully.")
             created = list(getattr(client, "last_created_items", []) or [])
-            if IS_BETA and created:
+            if created:
                 self._show_created_items_report(result, created)
             else:
                 messagebox.showinfo("QuickBooks Upload", result)

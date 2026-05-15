@@ -1,6 +1,6 @@
 {
-  "version": "1.002b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "3443bbdf084071d88b7532706832f247523f8e679c64840ba0df8b782d537fa2",
-  "notes": "Beta releases are now suffixed with a 'b' (v1.002b instead of v1.002 Beta). Includes the room grouping toggle and the new Created Items report from the previous beta."
+  "version": "1.002",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.002/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "df37fb9ed947e0fdff5b13c30eb1283c25a91c2fbb0eaa7e9926ac8dbf98989e",
+  "notes": "Room grouping graduated to stable v1.002 — no separate beta build is in flight right now. This entry points to the stable release."
 }
