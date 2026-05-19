@@ -1,6 +1,6 @@
 {
-  "version": "1.021",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.021/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "02a4dfd5aa34d8ca9d721e80a5857f861d249a8da8865b41ee2dcabc823be9b4",
-  "notes": "No separate beta build in flight right now. This entry points to the stable release."
+  "version": "1.022b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.022b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "76ec3add0505bd905537a626c162a147a4573da782dc1d673aa6db75984a99f5",
+  "notes": "Cleaner, flatter UI in the EZTools style. Buttons drop the raised+shadow treatment and use a single light border instead. Borders, dividers, and table row alternation are softened. Same layout — just calmer and more breathable."
 }

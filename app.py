@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.021"
+APP_VERSION = "v1.022b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -73,13 +73,13 @@ log.info("Settings dir: %s", SETTINGS_DIR)
 log.info("Log file: %s", LOG_PATH)
 
 UI = {
-    "bg_window": "#F4F6FA",
+    "bg_window": "#F5F7FA",
     "bg_card": "#FFFFFF",
-    "bg_subtle": "#EEF2F7",
-    "bg_hover": "#E3EAF3",
-    "bg_pressed": "#D6E0EE",
-    "border": "#DCE3EE",
-    "border_strong": "#BFC8D7",
+    "bg_subtle": "#F2F4F8",
+    "bg_hover": "#EDF2FB",
+    "bg_pressed": "#DEE7F5",
+    "border": "#E5E9F0",
+    "border_strong": "#CDD3DC",
     "border_inner_light": "#FFFFFF",
     "text_primary": "#0F172A",
     "text_secondary": "#475569",
@@ -639,8 +639,8 @@ class SalesOrderApp:
             "TEntry",
             fieldbackground=c["bg_card"],
             foreground=c["text_primary"],
-            bordercolor=c["border_strong"],
-            lightcolor=c["border_strong"],
+            bordercolor=c["border"],
+            lightcolor=c["border"],
             darkcolor=c["border"],
             insertcolor=c["text_primary"],
             borderwidth=1,
@@ -709,12 +709,12 @@ class SalesOrderApp:
             font=("Segoe UI Semibold", 10),
             background=c["accent"],
             foreground="#FFFFFF",
-            bordercolor=c["accent_dark"],
+            bordercolor=c["accent"],
             lightcolor=c["accent"],
-            darkcolor=c["accent_dark"],
-            borderwidth=2,
+            darkcolor=c["accent"],
+            borderwidth=0,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Primary.TButton",
@@ -739,24 +739,21 @@ class SalesOrderApp:
             ],
         )
 
-        # v1.012b: all buttons get a visible outline + a shadow-style edge.
-        # In the clam theme, relief="raised" with borderwidth=2 draws
-        # lightcolor on the top/left of the rim and darkcolor on the
-        # bottom/right. Setting lightcolor close to the button background
-        # (so the top is "invisible") and darkcolor to a clearly darker
-        # shade gives the effect of a drop shadow underneath the button.
+        # v1.022b: flat, clean buttons. EZTools-inspired look — single
+        # 1px border, no shadow, just enough padding to breathe. Pressed
+        # state uses the subtle pressed-bg; hover lifts to bg_hover.
         self.style.configure(
             "Accent.TButton",
             padding=(16, 9),
             font=("Segoe UI Semibold", 10),
             background=c["bg_card"],
             foreground=c["accent"],
-            bordercolor=c["accent"],
-            lightcolor=c["bg_card"],
-            darkcolor=c["accent"],
-            borderwidth=2,
+            bordercolor=c["border"],
+            lightcolor=c["border"],
+            darkcolor=c["border"],
+            borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="solid",
         )
         self.style.map(
             "Accent.TButton",
@@ -780,16 +777,16 @@ class SalesOrderApp:
 
         self.style.configure(
             "Quiet.TButton",
-            padding=(14, 9),
+            padding=(14, 8),
             font=("Segoe UI", 10),
             background=c["bg_card"],
             foreground=c["text_primary"],
-            bordercolor=c["border_strong"],
-            lightcolor=c["bg_card"],
-            darkcolor=c["border_strong"],
-            borderwidth=2,
+            bordercolor=c["border"],
+            lightcolor=c["border"],
+            darkcolor=c["border"],
+            borderwidth=1,
             focusthickness=0,
-            relief="raised",
+            relief="solid",
         )
 
         # Green/Success button for "commit" actions like Upload to QuickBooks.
@@ -801,10 +798,10 @@ class SalesOrderApp:
             foreground="#FFFFFF",
             bordercolor=c["success"],
             lightcolor=c["success"],
-            darkcolor="#0E5E2C",
-            borderwidth=2,
+            darkcolor=c["success"],
+            borderwidth=0,
             focusthickness=0,
-            relief="raised",
+            relief="flat",
         )
         self.style.map(
             "Success.TButton",
