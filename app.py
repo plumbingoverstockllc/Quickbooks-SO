@@ -5,6 +5,7 @@ import logging
 import logging.handlers
 import os
 import re
+import sys
 import hashlib
 import threading
 import subprocess
@@ -34,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.026b"
+APP_VERSION = "v1.027b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -51,6 +52,17 @@ LEGACY_SETTINGS_FOLDER = "QB Sales Order Converter"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / LEGACY_SETTINGS_FOLDER
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 LOG_PATH = SETTINGS_DIR / "app.log"
+
+
+def _resource_path(filename: str) -> Path:
+    """Resolve a bundled resource path.
+
+    When running from a PyInstaller --onefile build, data files extracted
+    into sys._MEIPASS. When running from source, the file sits next to
+    app.py.
+    """
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / filename
 
 
 def _setup_logging() -> logging.Logger:
@@ -1954,113 +1966,73 @@ class SalesOrderApp:
         ttk.Label(status_bar, textvariable=self.status_var, style="Status.TLabel").pack(anchor="w")
 
     def _build_sidebar(self, sidebar: tk.Frame) -> None:
-        """DMQuotes brand block: blue document icon flowing into a green
-        ring with an = sign, then the DMQuotes wordmark below (DM blue,
-        Quotes green), tagline 'INTO QUICKBOOKS', and finally the
-        Shimiralabs + version pinned at the bottom."""
+        """DMQuotes brand block. Loads the actual logo PNG bundled with
+        the app (which contains the document/arrow/ring graphic plus
+        the wordmark and tagline) and pins Shimiralabs + version at the
+        bottom.
+        """
         c = UI
-        brand_blue = "#1E47B6"
-        brand_green = "#1FA049"
 
         # Top spacer so the logo doesn't kiss the accent strip.
-        tk.Frame(sidebar, bg=c["bg_sidebar"], height=22).pack(side="top")
+        tk.Frame(sidebar, bg=c["bg_sidebar"], height=18).pack(side="top")
 
-        logo_w, logo_h = 140, 64
-        logo = tk.Canvas(
-            sidebar,
-            width=logo_w,
-            height=logo_h,
-            bg=c["bg_sidebar"],
-            highlightthickness=0,
-            bd=0,
-        )
-        logo.pack(side="top")
+        logo_path = _resource_path("DMQuotes Logo.png")
+        self._sidebar_logo_image = None
+        loaded = False
+        if logo_path.exists():
+            try:
+                from PIL import Image, ImageTk
+                pil_img = Image.open(str(logo_path))
+                # Resize to fit comfortably in the sidebar width.
+                target = 150
+                pil_img = pil_img.convert("RGBA")
+                pil_img.thumbnail((target, target), Image.LANCZOS)
+                self._sidebar_logo_image = ImageTk.PhotoImage(pil_img)
+                tk.Label(
+                    sidebar,
+                    image=self._sidebar_logo_image,
+                    bg=c["bg_sidebar"],
+                    borderwidth=0,
+                ).pack(side="top")
+                loaded = True
+            except Exception:
+                log.exception("_build_sidebar: failed to load logo via PIL; falling back to tk.PhotoImage")
+                try:
+                    self._sidebar_logo_image = tk.PhotoImage(file=str(logo_path))
+                    # tk.PhotoImage can only scale via integer subsample.
+                    # Original is ~1254 px; subsample by 8 -> ~157 px.
+                    self._sidebar_logo_image = self._sidebar_logo_image.subsample(8, 8)
+                    tk.Label(
+                        sidebar,
+                        image=self._sidebar_logo_image,
+                        bg=c["bg_sidebar"],
+                        borderwidth=0,
+                    ).pack(side="top")
+                    loaded = True
+                except Exception:
+                    log.exception("_build_sidebar: tk.PhotoImage fallback also failed")
 
-        # --- Document icon (blue), left side ---
-        doc_x, doc_y, doc_w, doc_h = 8, 8, 36, 48
-        fold = 10  # corner-fold size
-        # Body outline as a polygon with a folded corner.
-        logo.create_polygon(
-            doc_x, doc_y,
-            doc_x + doc_w - fold, doc_y,
-            doc_x + doc_w, doc_y + fold,
-            doc_x + doc_w, doc_y + doc_h,
-            doc_x, doc_y + doc_h,
-            outline=brand_blue, width=3, fill="", smooth=False,
-        )
-        # The fold itself (small triangle in top-right).
-        logo.create_line(
-            doc_x + doc_w - fold, doc_y,
-            doc_x + doc_w - fold, doc_y + fold,
-            doc_x + doc_w, doc_y + fold,
-            fill=brand_blue, width=3,
-        )
-        # Three horizontal text lines inside.
-        for i, ly in enumerate((doc_y + 20, doc_y + 28, doc_y + 36)):
-            right_pad = 6 if i < 2 else 14
-            logo.create_line(doc_x + 6, ly, doc_x + doc_w - right_pad, ly,
-                             fill=brand_blue, width=3, capstyle="round")
-
-        # --- Arrow, middle ---
-        arrow_y = doc_y + doc_h // 2
-        # Three motion dashes to the left of the arrowhead, gradient-ish.
-        for dash_i, (x_start, x_end, dash_color) in enumerate((
-            (doc_x + doc_w + 4, doc_x + doc_w + 10, brand_blue),
-            (doc_x + doc_w + 12, doc_x + doc_w + 22, "#2A6CCC"),
-            (doc_x + doc_w + 24, doc_x + doc_w + 36, "#3B91A0"),
-        )):
-            logo.create_line(x_start, arrow_y, x_end, arrow_y,
-                             fill=dash_color, width=4, capstyle="round")
-        # Main arrow body + head, ending at the ring's left edge.
-        ring_x = 92
-        ring_r = 18
-        logo.create_line(
-            doc_x + doc_w + 38, arrow_y,
-            ring_x - 2, arrow_y,
-            fill=brand_green, width=4, capstyle="round",
-            arrow="last", arrowshape=(10, 12, 5),
-        )
-
-        # --- Green ring with "=" inside, right side ---
-        ring_cx, ring_cy = ring_x + ring_r, arrow_y
-        # Two open arcs that don't quite close (gap at top-right and
-        # bottom-left), echoing the source logo.
-        logo.create_arc(
-            ring_cx - ring_r, ring_cy - ring_r,
-            ring_cx + ring_r, ring_cy + ring_r,
-            start=20, extent=150, style="arc", outline=brand_green, width=3,
-        )
-        logo.create_arc(
-            ring_cx - ring_r, ring_cy - ring_r,
-            ring_cx + ring_r, ring_cy + ring_r,
-            start=200, extent=150, style="arc", outline=brand_green, width=3,
-        )
-        # = sign in the middle.
-        logo.create_line(ring_cx - 7, ring_cy - 4, ring_cx + 7, ring_cy - 4,
-                         fill=brand_green, width=2, capstyle="round")
-        logo.create_line(ring_cx - 7, ring_cy + 4, ring_cx + 7, ring_cy + 4,
-                         fill=brand_green, width=2, capstyle="round")
-
-        # --- Wordmark (DM blue + Quotes green) ---
-        wordmark = tk.Frame(sidebar, bg=c["bg_sidebar"])
-        wordmark.pack(side="top", pady=(12, 0))
-        tk.Label(
-            wordmark, text="DM",
-            bg=c["bg_sidebar"], fg=brand_blue,
-            font=("Segoe UI Black", 18),
-        ).pack(side="left")
-        tk.Label(
-            wordmark, text="Quotes",
-            bg=c["bg_sidebar"], fg=brand_green,
-            font=("Segoe UI Black", 18),
-        ).pack(side="left")
-
-        # --- Tagline ---
-        tk.Label(
-            sidebar, text="INTO QUICKBOOKS",
-            bg=c["bg_sidebar"], fg=brand_blue,
-            font=("Segoe UI Semibold", 8),
-        ).pack(side="top", pady=(2, 0))
+        if not loaded:
+            # Final fallback: plain text wordmark so the sidebar isn't blank.
+            brand_blue = "#1E47B6"
+            brand_green = "#1FA049"
+            wordmark = tk.Frame(sidebar, bg=c["bg_sidebar"])
+            wordmark.pack(side="top", pady=(20, 0))
+            tk.Label(
+                wordmark, text="DM",
+                bg=c["bg_sidebar"], fg=brand_blue,
+                font=("Segoe UI Black", 22),
+            ).pack(side="left")
+            tk.Label(
+                wordmark, text="Quotes",
+                bg=c["bg_sidebar"], fg=brand_green,
+                font=("Segoe UI Black", 22),
+            ).pack(side="left")
+            tk.Label(
+                sidebar, text="INTO QUICKBOOKS",
+                bg=c["bg_sidebar"], fg=brand_blue,
+                font=("Segoe UI Semibold", 9),
+            ).pack(side="top", pady=(4, 0))
 
         # Version pinned near the bottom.
         tk.Label(

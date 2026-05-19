@@ -1,6 +1,6 @@
 {
-  "version": "1.026b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.026b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "86e0ded001f7fcf9b2b7e8d31b6e09e9e068e9e82e6fa9c0b1aa212df65166ec",
-  "notes": "Fixes the Validation Messages panel being cut off on the right. The text box no longer claims its default 80-character width, so the right column of the Configuration card stays within the window."
+  "version": "1.027b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.027b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "4adcbcf3825e845f09cb78df758b7a4d89970eeccd4ba5ee7741d96c685420b1",
+  "notes": "Sidebar now shows the real DMQuotes logo PNG instead of a redrawn approximation. The brand image is bundled inside the installer so it works offline."
 }
