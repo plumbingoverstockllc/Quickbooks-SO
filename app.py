@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.033"
+APP_VERSION = "v1.034"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -440,6 +440,18 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"DMQuotes {APP_VERSION} · QuickBooks Sales Orders")
+        # v1.034: set the window/taskbar icon to the DMQuotes logo. The .ico
+        # is bundled next to the bootstrap by PyInstaller (--add-data) and
+        # resolved via _resource_path. iconbitmap(default=...) makes Tk apply
+        # the icon to every Toplevel as well, not just root. Wrap in try/except
+        # because the .ico may be missing in dev runs and iconbitmap can fail
+        # on some Windows configurations.
+        try:
+            icon_path = _resource_path("DMQuotes.ico")
+            if icon_path.exists():
+                self.root.iconbitmap(default=str(icon_path))
+        except (tk.TclError, OSError):
+            pass
         # v1.032: bump Tk's global scaling by 25% so every point-sized
         # font and text metric renders larger uniformly. Pixel-based
         # sizes (minsize, sidebar width, logo image) are scaled manually

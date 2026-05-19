@@ -1,6 +1,6 @@
 {
-  "version": "1.033",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.033/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "7a9508d25a2f6b0fcc558fb93ee1e4ba7a61a703baf57f633c37b48f32d22a0c",
-  "notes": "Customer field is noticeably longer. It now claims about a third of the top row and shows ~24 characters before truncation, so long names like 'Carl Larsen:8660 Hollywood Blvd' are visible without scrolling. Source File was trimmed slightly to make room."
+  "version": "1.034",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.034/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "707399d4dd31efdc46cd2180c62876317c29023acc46602800fecf672a32a347",
+  "notes": "Program icon is now the DMQuotes logo — visible in the taskbar, Alt-Tab switcher, and on the .exe itself. No functional changes."
 }
