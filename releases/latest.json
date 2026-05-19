@@ -1,6 +1,6 @@
 {
-  "version": "1.038",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.038/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "734d0c9449b1808bd6fc17e813df7b8d224522022ba88692f06c1c86aed5726c",
-  "notes": "Adds a splash screen that shows the DMQuotes logo the instant the .exe is launched, so the 3-5 second PyInstaller unpack window no longer looks like nothing happened. The splash is dismissed automatically once the main window is painted."
+  "version": "1.039",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.039/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "f182114f25fa1d5e12916fae9a44c67828c051f87e7760febeb31543d756b318",
+  "notes": "Adds STEP 1 / STEP 2 / STEP 3 / STEP 4 eyebrow labels above each action area so the workflow is self-explanatory for new users. STEP 1 sits over Source File, STEP 2 over the customer + order detail block, STEP 3 over Build Preview / Export, STEP 4 over Upload to QuickBooks."
 }

@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.038"
+APP_VERSION = "v1.039"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -640,6 +640,35 @@ class SalesOrderApp:
             background=c["bg_card"],
             foreground=c["text_secondary"],
             font=("Segoe UI", 9),
+        )
+        # v1.039: "STEP N" eyebrow labels above each action area, so the
+        # workflow is self-explanatory at a glance. Uppercase, accent-green,
+        # tight letter-spacing simulated via Segoe UI Black at a small size.
+        self.style.configure(
+            "StepEyebrow.TLabel",
+            background=c["bg_card"],
+            foreground=c["accent"],
+            font=("Segoe UI Black", 8),
+        )
+        self.style.configure(
+            "StepTitle.TLabel",
+            background=c["bg_card"],
+            foreground=c["text_primary"],
+            font=("Segoe UI Semibold", 11),
+        )
+        # Step badge variant for the action row, which sits on the window
+        # background (not the card), so the bg matches bg_window.
+        self.style.configure(
+            "StepEyebrowOnWindow.TLabel",
+            background=c["bg_window"],
+            foreground=c["accent"],
+            font=("Segoe UI Black", 8),
+        )
+        self.style.configure(
+            "StepTitleOnWindow.TLabel",
+            background=c["bg_window"],
+            foreground=c["text_primary"],
+            font=("Segoe UI Semibold", 11),
         )
         self.style.configure(
             "Status.TLabel",
@@ -1829,25 +1858,47 @@ class SalesOrderApp:
         )
         self.error_text.pack(fill="both", expand=True)
 
-        # v1.030b layout: one unified form grid, three labelled rows.
-        #   Row 0/1: Source File [Browse] | Customer | Sales Order No | Fetch
-        #   Row 2/3: Sales Order Date [📅] | Due Date [📅]
-        #   Row 5/6: Terms | Shipping Method | Currency | Tax Code | Default Income Account
-        # The previous separate paths_row is gone; Source File now lives
-        # inside the same grid as the rest so spans line up cleanly.
+        # v1.039 layout: same unified form grid, but each functional block
+        # gets a "STEP N — …" eyebrow + title above it so first-time users
+        # see the workflow without having to ask. Step 1 sits over the
+        # Source File column; Step 2 spans the customer/SO/date/config
+        # cluster. Steps 3 and 4 live below the form on the action row.
+        #
+        # Grid rows (shifted down by 2 vs v1.038 to make room for the
+        # step-header row at the top):
+        #   Row 0/1: STEP 1 / STEP 2 eyebrow + title headers
+        #   Row 2/3: Source File [Browse] | Customer | Sales Order No | Fetch
+        #   Row 4/5: Sales Order Date [📅] | Due Date [📅]
+        #   Row 7/8: Terms | Shipping Method | Currency | Tax Code | Default Income Account
         form = ttk.Frame(config_left, style="Card.TFrame")
         form.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         FORM_COLS = 16
         for i in range(FORM_COLS):
             form.columnconfigure(i, weight=1)
 
-        # --- Row 0/1: Source File, Customer, Sales Order No, Fetch ---
+        # --- Row 0/1: STEP headers ---
+        ttk.Label(form, text="STEP 1", style="StepEyebrow.TLabel").grid(
+            row=0, column=0, columnspan=5, sticky="w", padx=4, pady=(2, 0)
+        )
+        ttk.Label(
+            form, text="Pick the source quote file", style="StepTitle.TLabel"
+        ).grid(row=1, column=0, columnspan=5, sticky="w", padx=4, pady=(0, 6))
+        ttk.Label(form, text="STEP 2", style="StepEyebrow.TLabel").grid(
+            row=0, column=5, columnspan=11, sticky="w", padx=4, pady=(2, 0)
+        )
+        ttk.Label(
+            form,
+            text="Fill in the customer & order details",
+            style="StepTitle.TLabel",
+        ).grid(row=1, column=5, columnspan=11, sticky="w", padx=4, pady=(0, 6))
+
+        # --- Row 2/3: Source File, Customer, Sales Order No, Fetch ---
         # Reshuffled v1.033 to make Customer noticeably longer. Spans
         # now sum to 16 as: Source 5 | Customer 5 | SO No 3 | Fetch 3.
         src_label = ttk.Label(form, text="Source File", style="FieldLabel.TLabel")
-        src_label.grid(row=0, column=0, columnspan=5, sticky="w", padx=4, pady=(4, 1))
+        src_label.grid(row=2, column=0, columnspan=5, sticky="w", padx=4, pady=(4, 1))
         src_row = ttk.Frame(form, style="Card.TFrame")
-        src_row.grid(row=1, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 4))
+        src_row.grid(row=3, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 4))
         ttk.Button(
             src_row, text="Browse", command=self._browse_source, style="Quiet.TButton"
         ).pack(side="right", padx=(6, 0))
@@ -1858,24 +1909,24 @@ class SalesOrderApp:
         )
 
         customer_entry = self._form_entry(
-            form, "Customer", self.customer_var, 0, 5, 5, min_chars=24
+            form, "Customer", self.customer_var, 2, 5, 5, min_chars=24
         )
         so_no_entry = self._form_entry(
-            form, "Sales Order No", self.sales_order_no_var, 0, 10, 3, min_chars=8
+            form, "Sales Order No", self.sales_order_no_var, 2, 10, 3, min_chars=8
         )
         ttk.Button(
             form,
             text="Fetch Next",
             command=self.fetch_next_so,
             style="Quiet.TButton",
-        ).grid(row=1, column=13, columnspan=3, padx=4, sticky="ew", pady=(0, 4))
+        ).grid(row=3, column=13, columnspan=3, padx=4, sticky="ew", pady=(0, 4))
 
-        # --- Row 2/3: Sales Order Date, Due Date ---
+        # --- Row 4/5: Sales Order Date, Due Date ---
         so_date_entry = self._date_entry(
-            form, "Sales Order Date", self.sales_order_date_var, 2, 0, 6, min_chars=11
+            form, "Sales Order Date", self.sales_order_date_var, 4, 0, 6, min_chars=11
         )
         due_date_entry = self._date_entry(
-            form, "Due Date", self.due_date_var, 2, 6, 6, min_chars=11
+            form, "Due Date", self.due_date_var, 4, 6, 6, min_chars=11
         )
 
         # Required fields used by both Build Preview and Upload. Each entry
@@ -1890,18 +1941,19 @@ class SalesOrderApp:
         for _, var, entry in self._required_fields:
             var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
-        # --- Row 5/6: Terms, Shipping Method, Currency, Tax Code, Income Account ---
-        self._form_entry(form, "Terms", self.terms_var, 5, 0, 2, min_chars=10)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 5, 2, 4, min_chars=14)
-        self._form_entry(form, "Currency", self.currency_var, 5, 6, 2, min_chars=6)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 5, 8, 2, min_chars=6)
-        self._form_entry(form, "Default Income Account", self.income_account_var, 5, 10, 6, min_chars=18)
+        # --- Row 7/8: Terms, Shipping Method, Currency, Tax Code, Income Account ---
+        # (Row 6 is a small visual gap before the bottom config strip.)
+        self._form_entry(form, "Terms", self.terms_var, 7, 0, 2, min_chars=10)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 7, 2, 4, min_chars=14)
+        self._form_entry(form, "Currency", self.currency_var, 7, 6, 2, min_chars=6)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 7, 8, 2, min_chars=6)
+        self._form_entry(form, "Default Income Account", self.income_account_var, 7, 10, 6, min_chars=18)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and
         # Help menus in v1.013b.
         qb_bar = ttk.Frame(config_left, style="Card.TFrame")
-        qb_bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        qb_bar.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.qb_status_pill = tk.Frame(
             qb_bar,
             bg=c["bg_hover"],
@@ -1922,23 +1974,55 @@ class SalesOrderApp:
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
 
-        # Action row: only the primary flow buttons remain here. Change
-        # Pricing Rules and Export Template moved to the Setup menu.
+        # v1.039 action row: each primary action gets its own "STEP N" badge
+        # stacked above the button so the workflow reads top-to-bottom even
+        # though the buttons themselves are laid out left-to-right. Export
+        # for SaaSant stays alongside Build Preview under Step 3 — it's an
+        # alternate format of "preview output," not a separate step.
         actions = ttk.Frame(main_content, padding=(24, 4, 24, 10))
         actions.pack(fill="x")
-        ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
+
+        step3 = ttk.Frame(actions, style="TFrame")
+        step3.pack(side="left")
+        ttk.Label(step3, text="STEP 3", style="StepEyebrowOnWindow.TLabel").pack(
+            anchor="w", padx=2
+        )
+        ttk.Label(
+            step3,
+            text="Build the preview & verify the lines",
+            style="StepTitleOnWindow.TLabel",
+        ).pack(anchor="w", padx=2, pady=(0, 4))
+        step3_buttons = ttk.Frame(step3, style="TFrame")
+        step3_buttons.pack(anchor="w")
         ttk.Button(
-            actions,
+            step3_buttons,
+            text="Build Preview",
+            command=self.build_preview,
+            style="Primary.TButton",
+        ).pack(side="left")
+        ttk.Button(
+            step3_buttons,
             text="Export for SaaSant",
             command=self.export_saasant_template,
             style="Accent.TButton",
         ).pack(side="left", padx=(8, 0))
+
+        step4 = ttk.Frame(actions, style="TFrame")
+        step4.pack(side="left", padx=(28, 0))
+        ttk.Label(step4, text="STEP 4", style="StepEyebrowOnWindow.TLabel").pack(
+            anchor="w", padx=2
+        )
+        ttk.Label(
+            step4,
+            text="Upload the sales order to QuickBooks",
+            style="StepTitleOnWindow.TLabel",
+        ).pack(anchor="w", padx=2, pady=(0, 4))
         ttk.Button(
-            actions,
+            step4,
             text="Upload to QuickBooks",
             command=self.upload_to_quickbooks,
             style="Success.TButton",
-        ).pack(side="left", padx=(8, 0))
+        ).pack(anchor="w")
 
         content = ttk.Panedwindow(main_content, orient="vertical")
         content.pack(fill="both", expand=True, padx=24, pady=(0, 8))
