@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.035"
+APP_VERSION = "v1.036"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2014,7 +2014,7 @@ class SalesOrderApp:
         # Top spacer so the logo doesn't kiss the accent strip.
         tk.Frame(sidebar, bg=c["bg_sidebar"], height=18).pack(side="top")
 
-        logo_path = _resource_path("DMQuotes Logo.png")
+        logo_path = _resource_path("Logo_New.png")
         self._sidebar_logo_image = None
         loaded = False
         if logo_path.exists():
@@ -2025,18 +2025,9 @@ class SalesOrderApp:
                 target = 188
                 pil_img = pil_img.convert("RGBA")
                 pil_img.thumbnail((target, target), Image.LANCZOS)
-                # v1.035: the source PNG has an opaque white background.
-                # On the new dark-green sidebar that would show as an ugly
-                # white tile, so chroma-key near-white pixels to alpha=0
-                # before handing it to Tk. Threshold ~235 catches the soft
-                # antialiased edge without eating the logo's own light strokes.
-                px = pil_img.load()
-                w, h = pil_img.size
-                for y in range(h):
-                    for x in range(w):
-                        r, g, b, a = px[x, y]
-                        if r >= 235 and g >= 235 and b >= 235:
-                            px[x, y] = (r, g, b, 0)
+                # v1.036: Logo_New.png ships with a proper alpha channel, so
+                # it composites cleanly onto the dark-green sidebar with no
+                # chroma-key trick required.
                 self._sidebar_logo_image = ImageTk.PhotoImage(pil_img)
                 tk.Label(
                     sidebar,

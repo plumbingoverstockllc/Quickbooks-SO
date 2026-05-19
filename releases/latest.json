@@ -1,6 +1,6 @@
 {
-  "version": "1.035",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.035/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "efff71860d156b21711a41284d0d750df87978cd957ef1a5655d823d942fe39b",
-  "notes": "Color scheme retuned to the QuickBooks Desktop Enterprise green two-tone — dark forest sidebar with bright QB-green accents, replacing the cool blues that read like a doctor's office. Main form surface stays light for legibility."
+  "version": "1.036",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.036/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "1b2ebddce3243e384076975b72034e34dc04aed8977bedd7c03697a140e58d79",
+  "notes": "New logo with a proper transparent background — composites cleanly onto the dark-green sidebar instead of relying on the chroma-key trick. Program icon (.exe / taskbar) regenerated from the same artwork."
 }
