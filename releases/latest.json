@@ -1,6 +1,6 @@
 {
-  "version": "1.034",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.034/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "707399d4dd31efdc46cd2180c62876317c29023acc46602800fecf672a32a347",
-  "notes": "Program icon is now the DMQuotes logo — visible in the taskbar, Alt-Tab switcher, and on the .exe itself. No functional changes."
+  "version": "1.035",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.035/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "efff71860d156b21711a41284d0d750df87978cd957ef1a5655d823d942fe39b",
+  "notes": "Color scheme retuned to the QuickBooks Desktop Enterprise green two-tone — dark forest sidebar with bright QB-green accents, replacing the cool blues that read like a doctor's office. Main form surface stays light for legibility."
 }

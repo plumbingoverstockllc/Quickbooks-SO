@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.034"
+APP_VERSION = "v1.035"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -90,27 +90,34 @@ log.info("Settings dir: %s", SETTINGS_DIR)
 log.info("Log file: %s", LOG_PATH)
 
 UI = {
+    # v1.035: palette retuned to the QuickBooks Desktop Enterprise green
+    # two-tone (dark forest sidebar + bright QB-green accents) so the app
+    # stops reading like a doctor's office. Main content stays on a near-
+    # white surface for form legibility; everything chrome (sidebar, buttons,
+    # focus rings, accent strip) is green.
     "bg_window": "#FFFFFF",
     "bg_card": "#FFFFFF",
-    "bg_subtle": "#F2F4F8",
-    "bg_hover": "#EDF2FB",
-    "bg_pressed": "#DEE7F5",
-    "bg_sidebar": "#E5EAF2",
-    "border": "#E5E9F0",
-    "border_strong": "#CDD3DC",
+    "bg_subtle": "#F2F5F1",
+    "bg_hover": "#E8F1E4",
+    "bg_pressed": "#D1E5C8",
+    "bg_sidebar": "#1A3A33",
+    "sidebar_text": "#FFFFFF",
+    "sidebar_text_muted": "#9CB5AE",
+    "border": "#E1E6DE",
+    "border_strong": "#C7CFC2",
     "border_inner_light": "#FFFFFF",
-    "text_primary": "#0F172A",
-    "text_secondary": "#475569",
-    "text_tertiary": "#94A3B8",
-    "accent": "#2563EB",
-    "accent_light": "#3B82F6",
-    "accent_hover": "#1D4ED8",
-    "accent_pressed": "#1E40AF",
-    "accent_dark": "#1E3A8A",
-    "accent_bg": "#DBEAFE",
+    "text_primary": "#0F1F1B",
+    "text_secondary": "#3F5651",
+    "text_tertiary": "#7A8E89",
+    "accent": "#2CA01C",
+    "accent_light": "#3DB52A",
+    "accent_hover": "#26901A",
+    "accent_pressed": "#1F7A15",
+    "accent_dark": "#155A0E",
+    "accent_bg": "#E3F4DF",
     "btn_light_top": "#FFFFFF",
-    "btn_light_bottom": "#F4F6FA",
-    "btn_light_border": "#DCE3EE",
+    "btn_light_bottom": "#F1F5EE",
+    "btn_light_border": "#D5DDD0",
     "success": "#15803D",
     "success_bg": "#E5F5EC",
     "warning": "#B45309",
@@ -769,7 +776,7 @@ class SalesOrderApp:
             foreground=[("disabled", c["bg_card"])],
             lightcolor=[
                 ("pressed", c["accent_dark"]),
-                ("active", "#52A5EF"),
+                ("active", c["accent_light"]),
             ],
             darkcolor=[
                 ("pressed", c["accent_light"]),
@@ -2018,6 +2025,18 @@ class SalesOrderApp:
                 target = 188
                 pil_img = pil_img.convert("RGBA")
                 pil_img.thumbnail((target, target), Image.LANCZOS)
+                # v1.035: the source PNG has an opaque white background.
+                # On the new dark-green sidebar that would show as an ugly
+                # white tile, so chroma-key near-white pixels to alpha=0
+                # before handing it to Tk. Threshold ~235 catches the soft
+                # antialiased edge without eating the logo's own light strokes.
+                px = pil_img.load()
+                w, h = pil_img.size
+                for y in range(h):
+                    for x in range(w):
+                        r, g, b, a = px[x, y]
+                        if r >= 235 and g >= 235 and b >= 235:
+                            px[x, y] = (r, g, b, 0)
                 self._sidebar_logo_image = ImageTk.PhotoImage(pil_img)
                 tk.Label(
                     sidebar,
@@ -2045,37 +2064,37 @@ class SalesOrderApp:
 
         if not loaded:
             # Final fallback: plain text wordmark so the sidebar isn't blank.
-            brand_blue = "#1E47B6"
-            brand_green = "#1FA049"
+            # v1.035: sidebar is now dark green, so the wordmark flips to
+            # white + bright QB-green for contrast.
             wordmark = tk.Frame(sidebar, bg=c["bg_sidebar"])
             wordmark.pack(side="top", pady=(20, 0))
             tk.Label(
                 wordmark, text="DM",
-                bg=c["bg_sidebar"], fg=brand_blue,
+                bg=c["bg_sidebar"], fg=c["sidebar_text"],
                 font=("Segoe UI Black", 22),
             ).pack(side="left")
             tk.Label(
                 wordmark, text="Quotes",
-                bg=c["bg_sidebar"], fg=brand_green,
+                bg=c["bg_sidebar"], fg=c["accent_light"],
                 font=("Segoe UI Black", 22),
             ).pack(side="left")
             tk.Label(
                 sidebar, text="INTO QUICKBOOKS",
-                bg=c["bg_sidebar"], fg=brand_blue,
+                bg=c["bg_sidebar"], fg=c["sidebar_text_muted"],
                 font=("Segoe UI Semibold", 9),
             ).pack(side="top", pady=(4, 0))
 
-        # Version pinned near the bottom.
+        # Version pinned near the bottom — muted light on dark green.
         tk.Label(
             sidebar, text=APP_VERSION,
-            bg=c["bg_sidebar"], fg=c["text_tertiary"],
+            bg=c["bg_sidebar"], fg=c["sidebar_text_muted"],
             font=("Segoe UI", 9),
         ).pack(side="bottom", pady=(0, 12))
 
         # Subtle "made by" line above the version.
         tk.Label(
             sidebar, text="Shimiralabs",
-            bg=c["bg_sidebar"], fg=c["text_tertiary"],
+            bg=c["bg_sidebar"], fg=c["sidebar_text_muted"],
             font=("Segoe UI", 8),
         ).pack(side="bottom")
 
