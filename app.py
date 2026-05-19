@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.030b"
+APP_VERSION = "v1.031b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -466,7 +466,12 @@ class SalesOrderApp:
             y = max(0, (screen_h - win_h) // 2)
             self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
         try:
-            self.root.minsize(960, 640)
+            # v1.031b: bumped from 960×640 to 1200×720 so the
+            # Configuration card's form can never be squeezed below
+            # the point where the field minimum widths fit. Below this
+            # the entries would either truncate to "Pr..." / "C:/Us..."
+            # or overlap the sidebar.
+            self.root.minsize(1200, 720)
         except tk.TclError:
             pass
         # Persist window size + position on close so future launches
@@ -1806,12 +1811,18 @@ class SalesOrderApp:
         ttk.Button(
             src_row, text="Browse", command=self._browse_source, style="Quiet.TButton"
         ).pack(side="right", padx=(6, 0))
-        ttk.Entry(src_row, textvariable=self.source_path_var, width=1).pack(
+        # width=24 — long enough to show ~24 chars of a path before
+        # truncation kicks in. sticky/fill still lets it grow.
+        ttk.Entry(src_row, textvariable=self.source_path_var, width=24).pack(
             side="left", fill="x", expand=True
         )
 
-        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 7, 3)
-        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 10, 3)
+        customer_entry = self._form_entry(
+            form, "Customer", self.customer_var, 0, 7, 3, min_chars=14
+        )
+        so_no_entry = self._form_entry(
+            form, "Sales Order No", self.sales_order_no_var, 0, 10, 3, min_chars=8
+        )
         ttk.Button(
             form,
             text="Fetch Next",
@@ -1820,8 +1831,12 @@ class SalesOrderApp:
         ).grid(row=1, column=13, columnspan=3, padx=4, sticky="ew", pady=(0, 4))
 
         # --- Row 2/3: Sales Order Date, Due Date ---
-        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 2, 0, 6)
-        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 2, 6, 6)
+        so_date_entry = self._date_entry(
+            form, "Sales Order Date", self.sales_order_date_var, 2, 0, 6, min_chars=11
+        )
+        due_date_entry = self._date_entry(
+            form, "Due Date", self.due_date_var, 2, 6, 6, min_chars=11
+        )
 
         # Required fields used by both Build Preview and Upload. Each entry
         # gets a write trace on its var so typing clears the red error
@@ -1836,11 +1851,11 @@ class SalesOrderApp:
             var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
         # --- Row 5/6: Terms, Shipping Method, Currency, Tax Code, Income Account ---
-        self._form_entry(form, "Terms", self.terms_var, 5, 0, 2)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 5, 2, 4)
-        self._form_entry(form, "Currency", self.currency_var, 5, 6, 2)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 5, 8, 2)
-        self._form_entry(form, "Default Income Account", self.income_account_var, 5, 10, 6)
+        self._form_entry(form, "Terms", self.terms_var, 5, 0, 2, min_chars=10)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 5, 2, 4, min_chars=14)
+        self._form_entry(form, "Currency", self.currency_var, 5, 6, 2, min_chars=6)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 5, 8, 2, min_chars=6)
+        self._form_entry(form, "Default Income Account", self.income_account_var, 5, 10, 6, min_chars=18)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and
@@ -2110,30 +2125,30 @@ class SalesOrderApp:
             side="left", fill="x", expand=True
         )
 
-    def _form_entry(self, parent, label, var, row, col, span):
+    def _form_entry(self, parent, label, var, row, col, span, min_chars=10):
+        """Grid a labelled text entry. `min_chars` is the entry's minimum
+        character width — sticky="ew" lets it grow when the cell is wider,
+        but won't let it shrink below this floor. Stops fields from
+        collapsing to "Pr..." / "C:/Us..." on a narrow window."""
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
             row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
         )
-        # width=1 strips the 20-character minimum; sticky="ew" expands the
-        # entry to fill the cell. Without this, narrow form cells push past
-        # their column allocation and clip neighbouring widgets.
-        entry = ttk.Entry(parent, textvariable=var, width=1)
+        entry = ttk.Entry(parent, textvariable=var, width=min_chars)
         entry.grid(
             row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
         return entry
 
-    def _date_entry(self, parent, label, var, row, col, span):
-        """Form entry like _form_entry but with a small 📅 picker button on
-        the right that opens a calendar popup and fills the entry."""
+    def _date_entry(self, parent, label, var, row, col, span, min_chars=12):
+        """Form entry with a small 📅 picker button on the right. The
+        picker packs first (right) so it always reserves its width;
+        the entry packs second (left) and grows to fill the rest, but
+        won't shrink narrower than `min_chars` characters."""
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
             row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
         )
         wrap = ttk.Frame(parent, style="Card.TFrame")
         wrap.grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4))
-        # pack the picker first (side=right reserves its width), then the
-        # Entry fills the rest. Same pattern as the path row so neither
-        # widget gets squeezed off-screen on a narrow window.
         ttk.Button(
             wrap,
             text="📅",
@@ -2141,7 +2156,7 @@ class SalesOrderApp:
             command=lambda v=var: self._open_date_picker(v),
             style="Quiet.TButton",
         ).pack(side="right", padx=(4, 0))
-        entry = ttk.Entry(wrap, textvariable=var, width=1)
+        entry = ttk.Entry(wrap, textvariable=var, width=min_chars)
         entry.pack(side="left", fill="x", expand=True)
         return entry
 
