@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.027b"
+APP_VERSION = "v1.028b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1783,22 +1783,18 @@ class SalesOrderApp:
         )
         self.error_text.pack(fill="both", expand=True)
 
-        # Source File and Output File side-by-side. SaaSant Template and
-        # QB Company File path rows were removed in v1.012 -- the template
-        # path was only relevant for an old export shape; the QBW path is
-        # unused now that connect attaches to a running QuickBooks instead
-        # of opening a file. The vars stay so existing settings.json entries
-        # load without complaining.
+        # Only the Source File path row is shown now. The Output File row
+        # was removed in v1.028b -- the Export for SaaSant / Export
+        # Template actions pop a Save-As dialog at the moment of export
+        # instead of relying on a pre-set output path. output_path_var
+        # still exists and is updated with whatever location the user
+        # picks, so the dialog can default to that location next time.
         paths_row = ttk.Frame(config_left, style="Card.TFrame")
         paths_row.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 4))
-        paths_row.columnconfigure(0, weight=1, uniform="paths")
-        paths_row.columnconfigure(1, weight=1, uniform="paths")
+        paths_row.columnconfigure(0, weight=1)
         src_cell = ttk.Frame(paths_row, style="Card.TFrame")
-        src_cell.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        src_cell.grid(row=0, column=0, sticky="ew")
         self._path_row_inline(src_cell, "Source File", self.source_path_var, self._browse_source)
-        out_cell = ttk.Frame(paths_row, style="Card.TFrame")
-        out_cell.grid(row=0, column=1, sticky="ew", padx=(8, 0))
-        self._path_row_inline(out_cell, "Output File", self.output_path_var, self._browse_output)
 
         form = ttk.Frame(config_left, style="Card.TFrame")
         form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
@@ -2803,30 +2799,60 @@ class SalesOrderApp:
         drop_cols = [c for c in (ROOM_COLUMN, COST_COLUMN) if c in self.output_df.columns]
         return self.output_df.drop(columns=drop_cols) if drop_cols else self.output_df
 
+    def _ask_export_path(self, title: str) -> "Path | None":
+        """Pop a Save-As dialog for the export file. Returns the chosen
+        path or None if the user cancelled.
+
+        Pre-fills the dialog with:
+        - initialdir: the directory of the last saved export if it still
+          exists, otherwise the user's Downloads folder.
+        - initialfile: SalesOrder_<so>_<date>.xlsx so the user just has
+          to confirm or tweak.
+        """
+        date_part = datetime.now().strftime("%m-%d-%Y")
+        so_value = self.sales_order_no_var.get().strip() or "SO"
+        safe_so = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
+        default_name = f"SalesOrder_{safe_so}_{date_part}.xlsx"
+
+        downloads = Path.home() / "Downloads"
+        saved = (self.output_path_var.get() or "").strip()
+        initial_dir = ""
+        if saved:
+            saved_parent = Path(saved).parent
+            if saved_parent.exists():
+                initial_dir = str(saved_parent)
+        if not initial_dir and downloads.exists():
+            initial_dir = str(downloads)
+
+        chosen = filedialog.asksaveasfilename(
+            title=title,
+            defaultextension=".xlsx",
+            initialdir=initial_dir or None,
+            initialfile=default_name,
+            filetypes=[("Excel Workbook", "*.xlsx"), ("All Files", "*.*")],
+        )
+        return Path(chosen) if chosen else None
+
     def export_file(self):
         if self.output_df is None or self.output_df.empty:
             messagebox.showwarning("No data", "Build preview first.")
             return
-        output_path = self.output_path_var.get().strip()
-        if not output_path:
-            messagebox.showwarning("Missing output path", "Choose an output file path.")
+        output_path = self._ask_export_path("Export Template")
+        if output_path is None:
             return
         self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
+        self.output_path_var.set(str(output_path))
         self._persist_settings()
-        self._set_status(f"Exported template file: {Path(output_path).name}")
-        self._show_post_export_actions(Path(output_path))
+        self._set_status(f"Exported template file: {output_path.name}")
+        self._show_post_export_actions(output_path)
 
     def export_saasant_template(self):
         if self.output_df is None or self.output_df.empty:
             messagebox.showwarning("No data", "Build preview first.")
             return
-
-        downloads_dir = Path.home() / "Downloads"
-        date_part = datetime.now().strftime("%m-%d-%Y")
-        so_value = self.sales_order_no_var.get().strip() or "SO"
-        safe_so_value = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
-        output_path = downloads_dir / f"SalesOrder_'{safe_so_value}'_{date_part}.xlsx"
-
+        output_path = self._ask_export_path("Export for SaaSant")
+        if output_path is None:
+            return
         self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
         self.output_path_var.set(str(output_path))
         self._persist_settings()

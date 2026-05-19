@@ -1,6 +1,6 @@
 {
-  "version": "1.027b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.027b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4adcbcf3825e845f09cb78df758b7a4d89970eeccd4ba5ee7741d96c685420b1",
-  "notes": "Sidebar now shows the real DMQuotes logo PNG instead of a redrawn approximation. The brand image is bundled inside the installer so it works offline."
+  "version": "1.028b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.028b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "ba49bd0bf6f553537396e631f46255ad7e5f78071a9b2f8c514eb0460e225978",
+  "notes": "Output File field removed from the Configuration card. Export for SaaSant and Export Template now pop a Save As dialog at export time, pre-filled with a SalesOrder_<SO>_<date>.xlsx name and your last-used folder."
 }
