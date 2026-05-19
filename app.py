@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.029b"
+APP_VERSION = "v1.030b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1783,40 +1783,45 @@ class SalesOrderApp:
         )
         self.error_text.pack(fill="both", expand=True)
 
-        # Only the Source File path row is shown now. The Output File row
-        # was removed in v1.028b -- the Export for SaaSant / Export
-        # Template actions pop a Save-As dialog at the moment of export
-        # instead of relying on a pre-set output path. output_path_var
-        # still exists and is updated with whatever location the user
-        # picks, so the dialog can default to that location next time.
-        paths_row = ttk.Frame(config_left, style="Card.TFrame")
-        paths_row.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 4))
-        paths_row.columnconfigure(0, weight=1)
-        src_cell = ttk.Frame(paths_row, style="Card.TFrame")
-        src_cell.grid(row=0, column=0, sticky="ew")
-        self._path_row_inline(src_cell, "Source File", self.source_path_var, self._browse_source)
-
+        # v1.030b layout: one unified form grid, three labelled rows.
+        #   Row 0/1: Source File [Browse] | Customer | Sales Order No | Fetch
+        #   Row 2/3: Sales Order Date [📅] | Due Date [📅]
+        #   Row 5/6: Terms | Shipping Method | Currency | Tax Code | Default Income Account
+        # The previous separate paths_row is gone; Source File now lives
+        # inside the same grid as the rest so spans line up cleanly.
         form = ttk.Frame(config_left, style="Card.TFrame")
-        form.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
-        # 16-column grid -- coarse enough that field spans land on clean
-        # boundaries without overflowing config_left's allocated width.
+        form.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         FORM_COLS = 16
         for i in range(FORM_COLS):
             form.columnconfigure(i, weight=1)
 
-        # Row 0/1: Customer (medium-wide), Sales Order No (narrow),
-        # Fetch button (compact), Sales Order Date + picker, Due Date +
-        # picker. Spans sum to 16.
-        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 0, 6)
-        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 6, 2)
+        # --- Row 0/1: Source File, Customer, Sales Order No, Fetch ---
+        # Source File occupies cols 0-6 (label on row 0, entry+browse on
+        # row 1). Nested frame because the entry+browse pair needs pack
+        # to keep the Browse button from being clipped.
+        src_label = ttk.Label(form, text="Source File", style="FieldLabel.TLabel")
+        src_label.grid(row=0, column=0, columnspan=7, sticky="w", padx=4, pady=(4, 1))
+        src_row = ttk.Frame(form, style="Card.TFrame")
+        src_row.grid(row=1, column=0, columnspan=7, sticky="ew", padx=4, pady=(0, 4))
+        ttk.Button(
+            src_row, text="Browse", command=self._browse_source, style="Quiet.TButton"
+        ).pack(side="right", padx=(6, 0))
+        ttk.Entry(src_row, textvariable=self.source_path_var, width=1).pack(
+            side="left", fill="x", expand=True
+        )
+
+        customer_entry = self._form_entry(form, "Customer", self.customer_var, 0, 7, 3)
+        so_no_entry = self._form_entry(form, "Sales Order No", self.sales_order_no_var, 0, 10, 3)
         ttk.Button(
             form,
             text="Fetch Next",
             command=self.fetch_next_so,
             style="Quiet.TButton",
-        ).grid(row=1, column=8, padx=4, sticky="ew", columnspan=2)
-        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 0, 10, 3)
-        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 0, 13, 3)
+        ).grid(row=1, column=13, columnspan=3, padx=4, sticky="ew", pady=(0, 4))
+
+        # --- Row 2/3: Sales Order Date, Due Date ---
+        so_date_entry = self._date_entry(form, "Sales Order Date", self.sales_order_date_var, 2, 0, 6)
+        due_date_entry = self._date_entry(form, "Due Date", self.due_date_var, 2, 6, 6)
 
         # Required fields used by both Build Preview and Upload. Each entry
         # gets a write trace on its var so typing clears the red error
@@ -1830,16 +1835,12 @@ class SalesOrderApp:
         for _, var, entry in self._required_fields:
             var.trace_add("write", lambda *_a, e=entry: self._clear_field_error(e))
 
-        # Row 3/4: Terms / Shipping Method / Currency / Tax Code /
-        # Default Income Account. v1.017b: spans now sum to the new
-        # 16-column form width.
-        self._form_entry(form, "Terms", self.terms_var, 3, 0, 2)
-        self._form_entry(form, "Shipping Method", self.shipping_method_var, 3, 2, 4)
-        self._form_entry(form, "Currency", self.currency_var, 3, 6, 2)
-        self._form_entry(form, "Tax Code", self.tax_code_var, 3, 8, 2)
-        # Default Income Account stays visible; Fallback Item removed in
-        # v1.012 (income-account auto-create is the only recovery path now).
-        self._form_entry(form, "Default Income Account", self.income_account_var, 3, 10, 6)
+        # --- Row 5/6: Terms, Shipping Method, Currency, Tax Code, Income Account ---
+        self._form_entry(form, "Terms", self.terms_var, 5, 0, 2)
+        self._form_entry(form, "Shipping Method", self.shipping_method_var, 5, 2, 4)
+        self._form_entry(form, "Currency", self.currency_var, 5, 6, 2)
+        self._form_entry(form, "Tax Code", self.tax_code_var, 5, 8, 2)
+        self._form_entry(form, "Default Income Account", self.income_account_var, 5, 10, 6)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and

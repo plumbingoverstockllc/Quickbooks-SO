@@ -1,6 +1,6 @@
 {
-  "version": "1.029b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.029b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "f1eefa035b722da02e0079f93c41976bc10ca5d5e558d58ab7cfceb238e9e934",
-  "notes": "Form fields shrink properly to fit the window. The Source File Browse button and Due Date calendar picker no longer get clipped on narrower windows."
+  "version": "1.030b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.030b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "ccf1b4b1f76821fa55e5edfcf55916110229e24432adbc0fe165f778985b3ad4",
+  "notes": "New three-row form layout. Top row holds Source File, Customer, Sales Order No, and Fetch Next together. Sales Order Date and Due Date share the second row with plenty of room for the calendar pickers. Terms, Shipping Method, Currency, Tax Code, and Default Income Account stay on the bottom row."
 }
