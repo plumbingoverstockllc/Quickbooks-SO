@@ -1,6 +1,6 @@
 {
-  "version": "1.022b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.022b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "76ec3add0505bd905537a626c162a147a4573da782dc1d673aa6db75984a99f5",
-  "notes": "Cleaner, flatter UI in the EZTools style. Buttons drop the raised+shadow treatment and use a single light border instead. Borders, dividers, and table row alternation are softened. Same layout — just calmer and more breathable."
+  "version": "1.023b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.023b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "4a517b5256161ecec440f8ada0920ebdbd778b6e03a91abb877a3b2198a4c8e6",
+  "notes": "Two-tone layout. A slim sidebar runs down the left side with a rounded SO logo at the top, the wordmark below, and Shimiralabs + the version at the bottom. The main content area keeps the form, action row, and preview, with a thin divider between."
 }

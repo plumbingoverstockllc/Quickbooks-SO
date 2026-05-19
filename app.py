@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.022b"
+APP_VERSION = "v1.023b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1686,19 +1686,35 @@ class SalesOrderApp:
         accent_strip = tk.Frame(root, bg=strip_color, height=4)
         accent_strip.pack(fill="x", side="top")
 
-        header = ttk.Frame(root, padding=(32, 22, 32, 16))
+        # Body splits into sidebar (left, two-tone) and main content (right).
+        # Status bar (packed below) and accent strip (packed above) frame
+        # this body section vertically.
+        body = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
+        body.pack(fill="both", expand=True)
+
+        sidebar = tk.Frame(body, bg=c["bg_subtle"], width=160, highlightthickness=0, bd=0)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        sidebar_border = tk.Frame(body, bg=c["border"], width=1)
+        sidebar_border.pack(side="left", fill="y")
+        self._build_sidebar(sidebar)
+
+        # Wrap everything that used to be at root level in `main_content`.
+        main_content = tk.Frame(body, bg=c["bg_window"], highlightthickness=0, bd=0)
+        main_content.pack(side="left", fill="both", expand=True)
+
+        # A slimmer header in the main area now -- the brand block lives in
+        # the sidebar so the top of the content can just show the subtitle.
+        header = ttk.Frame(main_content, padding=(24, 16, 24, 8))
         header.pack(fill="x")
-        title_row = ttk.Frame(header)
-        title_row.pack(fill="x")
-        ttk.Label(title_row, text="QB Sales Order Converter", style="AppTitle.TLabel").pack(side="left")
         ttk.Label(
             header,
-            text=f"{APP_VERSION} · Upload source data, review mapped rows, then export or upload to QuickBooks Desktop.",
+            text="Upload source data, review mapped rows, then export or upload to QuickBooks Desktop.",
             style="SubHeader.TLabel",
-        ).pack(anchor="w", pady=(6, 0))
+        ).pack(anchor="w")
 
-        config = ttk.LabelFrame(root, text="  Configuration  ", style="Card.TLabelframe")
-        config.pack(fill="x", padx=32, pady=(4, 8))
+        config = ttk.LabelFrame(main_content, text="  Configuration  ", style="Card.TLabelframe")
+        config.pack(fill="x", padx=24, pady=(4, 8))
         # Two columns: form fields on the left, validation messages on the
         # right. v1.017b shifts the ratio to 3:1 so the form has enough
         # room and Validation Messages still gets a comfortable column.
@@ -1832,7 +1848,7 @@ class SalesOrderApp:
 
         # Action row: only the primary flow buttons remain here. Change
         # Pricing Rules and Export Template moved to the Setup menu.
-        actions = ttk.Frame(root, padding=(32, 4, 32, 10))
+        actions = ttk.Frame(main_content, padding=(24, 4, 24, 10))
         actions.pack(fill="x")
         ttk.Button(actions, text="Build Preview", command=self.build_preview, style="Primary.TButton").pack(side="left")
         ttk.Button(
@@ -1848,8 +1864,8 @@ class SalesOrderApp:
             style="Success.TButton",
         ).pack(side="left", padx=(8, 0))
 
-        content = ttk.Panedwindow(root, orient="vertical")
-        content.pack(fill="both", expand=True, padx=32, pady=(0, 8))
+        content = ttk.Panedwindow(main_content, orient="vertical")
+        content.pack(fill="both", expand=True, padx=24, pady=(0, 8))
 
         preview_frame = ttk.LabelFrame(content, text="  Preview  ", style="Card.TLabelframe")
         content.add(preview_frame, weight=12)
@@ -1924,6 +1940,81 @@ class SalesOrderApp:
         separator = tk.Frame(status_bar, bg=c["border"], height=1)
         separator.pack(fill="x", side="top")
         ttk.Label(status_bar, textvariable=self.status_var, style="Status.TLabel").pack(anchor="w")
+
+    def _build_sidebar(self, sidebar: tk.Frame) -> None:
+        """Draw the brand block at the top of the left sidebar: rounded
+        accent square logo with 'SO' in white, the wordmark below, and
+        the version line at the very bottom."""
+        c = UI
+
+        # Top spacer so the logo doesn't kiss the accent strip.
+        tk.Frame(sidebar, bg=c["bg_subtle"], height=20).pack(side="top")
+
+        logo_size = 64
+        logo = tk.Canvas(
+            sidebar,
+            width=logo_size,
+            height=logo_size,
+            bg=c["bg_subtle"],
+            highlightthickness=0,
+            bd=0,
+        )
+        logo.pack(side="top")
+        self._draw_rounded_rect(logo, 4, 4, logo_size - 4, logo_size - 4, radius=14, fill=c["accent"])
+        # Slight inner highlight to give the badge depth.
+        logo.create_oval(
+            logo_size // 2 - 6, 10, logo_size // 2 + 14, 28,
+            fill=c["accent_light"], outline="",
+        )
+        logo.create_text(
+            logo_size // 2,
+            logo_size // 2 + 2,
+            text="SO",
+            fill="#FFFFFF",
+            font=("Segoe UI Black", 22),
+        )
+
+        # Wordmark.
+        tk.Label(
+            sidebar, text="QuickBooks",
+            bg=c["bg_subtle"], fg=c["text_secondary"],
+            font=("Segoe UI", 9, "normal"),
+        ).pack(pady=(14, 0))
+        tk.Label(
+            sidebar, text="Sales Order",
+            bg=c["bg_subtle"], fg=c["text_primary"],
+            font=("Segoe UI Semibold", 12),
+        ).pack()
+        tk.Label(
+            sidebar, text="Converter",
+            bg=c["bg_subtle"], fg=c["text_primary"],
+            font=("Segoe UI Semibold", 12),
+        ).pack()
+
+        # Version pinned near the bottom.
+        tk.Label(
+            sidebar, text=APP_VERSION,
+            bg=c["bg_subtle"], fg=c["text_tertiary"],
+            font=("Segoe UI", 9),
+        ).pack(side="bottom", pady=(0, 12))
+
+        # Subtle "made by" line above the version.
+        tk.Label(
+            sidebar, text="Shimiralabs",
+            bg=c["bg_subtle"], fg=c["text_tertiary"],
+            font=("Segoe UI", 8),
+        ).pack(side="bottom")
+
+    def _draw_rounded_rect(self, canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int, radius: int, fill: str) -> None:
+        """Approximate a filled rounded rectangle on a Tk canvas using four
+        corner arcs plus two overlapping rectangles."""
+        d = radius * 2
+        canvas.create_arc(x1, y1, x1 + d, y1 + d, start=90, extent=90, fill=fill, outline=fill)
+        canvas.create_arc(x2 - d, y1, x2, y1 + d, start=0, extent=90, fill=fill, outline=fill)
+        canvas.create_arc(x1, y2 - d, x1 + d, y2, start=180, extent=90, fill=fill, outline=fill)
+        canvas.create_arc(x2 - d, y2 - d, x2, y2, start=270, extent=90, fill=fill, outline=fill)
+        canvas.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=fill, outline=fill)
+        canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=fill, outline=fill)
 
     def _clear_field_error(self, entry) -> None:
         """Reset an entry's style back to default TEntry. Safe to call on
