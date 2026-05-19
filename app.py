@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.025b"
+APP_VERSION = "v1.026b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1763,6 +1763,11 @@ class SalesOrderApp:
             padx=6,
             pady=6,
             height=6,
+            # Explicit small width so the Text widget doesn't claim the
+            # default 80 characters and push the right column past the
+            # config card's allocation. The fill="both"/expand=True on the
+            # pack still stretches it to fill whatever space is granted.
+            width=10,
         )
         self.error_text.pack(fill="both", expand=True)
 
