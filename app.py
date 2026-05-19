@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.036"
+APP_VERSION = "v1.037"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1441,8 +1441,15 @@ class SalesOrderApp:
         return text.strip()
 
     def _show_update_dialog(self, latest_version: str, notes: str, is_beta: bool = False) -> bool:
-        """Present a clean Update Available dialog. Returns True if user wants
-        to install, False otherwise."""
+        """Present an Update Available dialog. Returns True if user wants
+        to install, False otherwise.
+
+        Stable updates are FORCED: the dialog shows a single OK button and
+        the window can't be dismissed via X or Escape — the user must click
+        OK and the install proceeds. Beta updates stay optional (they're
+        opt-in by definition) and keep the "Not Now" escape hatch.
+        """
+        force = not is_beta
         c = UI
         dlg = tk.Toplevel(self.root)
         dlg.title("Beta Update Available" if is_beta else "Update Available")
@@ -1468,7 +1475,7 @@ class SalesOrderApp:
         title_text = (
             f"Beta v{latest_version} available"
             if is_beta
-            else f"Version {latest_version} is available"
+            else f"Update is available — press OK to update"
         )
         tk.Label(
             body,
@@ -1545,13 +1552,20 @@ class SalesOrderApp:
             decision["install"] = False
             dlg.destroy()
 
-        ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
-        install_label = "Install Beta" if is_beta else "Install Update"
-        ttk.Button(button_row, text=install_label, command=install, style="Primary.TButton").pack(
-            side="right", padx=(0, 10)
-        )
-
-        dlg.protocol("WM_DELETE_WINDOW", cancel)
+        if force:
+            # Stable: single OK button, no Not Now, X disabled. The user is
+            # going to update.
+            ttk.Button(
+                button_row, text="OK", command=install, style="Primary.TButton",
+            ).pack(side="right")
+            dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+            dlg.bind("<Return>", lambda e: install())
+        else:
+            ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
+            ttk.Button(
+                button_row, text="Install Beta", command=install, style="Primary.TButton",
+            ).pack(side="right", padx=(0, 10))
+            dlg.protocol("WM_DELETE_WINDOW", cancel)
         dlg.update_idletasks()
         # Center over the main window.
         try:
@@ -2977,46 +2991,207 @@ class SalesOrderApp:
                 "Please fill in the following before uploading:\n\n  - " + "\n  - ".join(missing),
             )
             return
+        upload_kwargs = dict(
+            customer_name=self.customer_var.get().strip(),
+            sales_order_no=self.sales_order_no_var.get().strip(),
+            txn_date=self._normalize_date_for_qb(self.sales_order_date_var.get().strip()),
+            due_date=self._normalize_date_for_qb(self.due_date_var.get().strip()),
+            terms=self.terms_var.get().strip() or "Prepaid",
+            shipping_method=self.shipping_method_var.get().strip() or "Standard Ground",
+            memo=self.memo_var.get().strip(),
+            lines=self.output_df.to_dict(orient="records"),
+            tax_code=self.tax_code_var.get().strip() or "TAX",
+            sales_tax_item="CA Tax",
+            fallback_item=self.fallback_item_var.get().strip(),
+            income_account=self.income_account_var.get().strip(),
+            expense_account="COGS Non Inventory",
+            group_by_room=True,
+        )
         log.info(
             "Upload to QuickBooks: starting — customer=%r so=%r lines=%d",
-            self.customer_var.get().strip(),
-            self.sales_order_no_var.get().strip(),
+            upload_kwargs["customer_name"],
+            upload_kwargs["sales_order_no"],
             len(self.output_df),
         )
+        self._run_upload_with_progress(upload_kwargs)
+
+    def _run_upload_with_progress(self, upload_kwargs: dict) -> None:
+        """Open a streaming progress dialog and run the SalesOrderAdd in a
+        worker thread. Each progress callback from the SDK appends a line
+        to the log Text widget so the user sees what's happening line by
+        line. When the worker finishes, the dialog flips into a "Done"
+        state with a single button to close.
+        """
+        c = UI
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Uploading to QuickBooks")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("700x520")
         try:
-            client = self._qb_client()
-            result = client.upload_sales_order(
-                customer_name=self.customer_var.get().strip(),
-                sales_order_no=self.sales_order_no_var.get().strip(),
-                txn_date=self._normalize_date_for_qb(self.sales_order_date_var.get().strip()),
-                due_date=self._normalize_date_for_qb(self.due_date_var.get().strip()),
-                terms=self.terms_var.get().strip() or "Prepaid",
-                shipping_method=self.shipping_method_var.get().strip() or "Standard Ground",
-                memo=self.memo_var.get().strip(),
-                lines=self.output_df.to_dict(orient="records"),
-                tax_code=self.tax_code_var.get().strip() or "TAX",
-                sales_tax_item="CA Tax",
-                fallback_item=self.fallback_item_var.get().strip(),
-                income_account=self.income_account_var.get().strip(),
-                expense_account="COGS Non Inventory",
-                group_by_room=True,
-            )
-            log.info("Upload to QuickBooks: success — %s", result)
+            dlg.minsize(560, 420)
+        except tk.TclError:
+            pass
+        dlg.transient(self.root)
+        dlg.grab_set()
+        # Disable closing during the upload — re-enabled on completion.
+        dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        accent_strip = tk.Frame(dlg, bg=c["accent"], height=4)
+        accent_strip.pack(fill="x", side="top")
+
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
+
+        header = tk.Label(
+            body,
+            text="Uploading sales order...",
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 16),
+            anchor="w",
+        )
+        header.pack(fill="x")
+
+        sub_text = (
+            f"SO #{upload_kwargs.get('sales_order_no', '?')}  ·  "
+            f"{upload_kwargs.get('customer_name', '')}"
+        )
+        subheader = tk.Label(
+            body,
+            text=sub_text,
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+        )
+        subheader.pack(fill="x", pady=(2, 12))
+
+        log_wrap = tk.Frame(
+            body, bg=c["bg_card"],
+            highlightbackground=c["border"], highlightthickness=1, bd=0,
+        )
+        log_wrap.pack(fill="both", expand=True)
+        log_text = tk.Text(
+            log_wrap,
+            wrap="none",
+            bg=c["bg_card"],
+            fg=c["text_primary"],
+            font=("Consolas", 9),
+            bd=0,
+            relief="flat",
+            padx=10,
+            pady=8,
+            height=14,
+            width=10,  # let pack expand handle width; default 80 chars overflows
+        )
+        log_text.tag_configure("ok", foreground=c["success"])
+        log_text.tag_configure("err", foreground=c["danger"])
+        log_text.tag_configure("muted", foreground=c["text_tertiary"])
+        sb = ttk.Scrollbar(log_wrap, orient="vertical", command=log_text.yview)
+        log_text.configure(yscrollcommand=sb.set)
+        log_text.configure(state="disabled")
+        log_text.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        progress_bar = ttk.Progressbar(body, mode="indeterminate")
+        progress_bar.pack(fill="x", pady=(10, 0))
+        progress_bar.start(12)
+
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", pady=(12, 0))
+
+        state: dict = {"result": None, "error": None, "client": None}
+
+        def append_log(msg: str, tag: str = "") -> None:
+            log_text.configure(state="normal")
+            if tag:
+                log_text.insert("end", msg + "\n", tag)
+            else:
+                log_text.insert("end", msg + "\n")
+            log_text.see("end")
+            log_text.configure(state="disabled")
+
+        def on_progress(msg: str) -> None:
+            # SDK worker thread -> Tk main thread.
+            self.root.after(0, append_log, msg)
+
+        def finish() -> None:
+            if dlg.winfo_exists():
+                dlg.destroy()
+            if state["error"]:
+                self._set_qb_status("Connection Failed", state="disconnected")
+                messagebox.showerror(
+                    "QuickBooks Upload Error",
+                    f"{state['error']}\n\nSee the Log menu for details (file: {LOG_PATH}).",
+                )
+                return
             self._set_qb_status("Connected", state="connected")
             self._set_status("Sales order uploaded to QuickBooks successfully.")
-            created = list(getattr(client, "last_created_items", []) or [])
+            created = list(getattr(state["client"], "last_created_items", []) or [])
             if created:
-                self._show_created_items_report(result, created)
+                self._show_created_items_report(state["result"], created)
+
+        done_btn = ttk.Button(
+            button_row,
+            text="Done",
+            style="Primary.TButton",
+            command=finish,
+            state="disabled",
+        )
+        done_btn.pack(side="right")
+
+        def on_complete() -> None:
+            try:
+                progress_bar.stop()
+                progress_bar.configure(mode="determinate", maximum=100, value=100)
+            except tk.TclError:
+                pass
+            if state["error"]:
+                header.config(text="Upload failed", fg=c["danger"])
+                append_log("", tag="muted")
+                append_log(f"ERROR: {state['error']}", tag="err")
+                done_btn.configure(text="Close")
             else:
-                messagebox.showinfo("QuickBooks Upload", result)
-        except Exception as exc:
-            log.error("Upload to QuickBooks: failed — %s", exc)
-            log.debug("Upload traceback:\n%s", traceback.format_exc())
-            self._set_qb_status("Connection Failed", state="disconnected")
-            messagebox.showerror(
-                "QuickBooks Upload Error",
-                f"{exc}\n\nSee the Log menu for details (file: {LOG_PATH}).",
-            )
+                header.config(text="Done — sales order uploaded", fg=c["success"])
+                append_log("", tag="muted")
+                append_log(state["result"] or "Upload complete.", tag="ok")
+            done_btn.configure(state="normal")
+            dlg.protocol("WM_DELETE_WINDOW", finish)
+            dlg.bind("<Return>", lambda e: finish())
+            dlg.bind("<Escape>", lambda e: finish())
+
+        def worker() -> None:
+            try:
+                client = self._qb_client()
+                state["client"] = client
+                result = client.upload_sales_order(
+                    progress_cb=on_progress,
+                    **upload_kwargs,
+                )
+                state["result"] = result
+                log.info("Upload to QuickBooks: success — %s", result)
+            except Exception as exc:
+                state["error"] = str(exc)
+                log.error("Upload to QuickBooks: failed — %s", exc)
+                log.debug("Upload traceback:\n%s", traceback.format_exc())
+            finally:
+                self.root.after(0, on_complete)
+
+        # Center the dialog over the main window.
+        dlg.update_idletasks()
+        try:
+            self.root.update_idletasks()
+            rx = self.root.winfo_rootx()
+            ry = self.root.winfo_rooty()
+            rw = self.root.winfo_width()
+            rh = self.root.winfo_height()
+            dw = dlg.winfo_width()
+            dh = dlg.winfo_height()
+            dlg.geometry(f"+{rx + (rw - dw) // 2}+{ry + (rh - dh) // 2}")
+        except tk.TclError:
+            pass
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 def main():

@@ -8,7 +8,7 @@ import re
 import subprocess
 import traceback
 import xml.etree.ElementTree as ET
-from typing import Iterable, List
+from typing import Callable, Iterable, List, Optional
 
 import pythoncom
 import win32com.client
@@ -813,8 +813,21 @@ class QuickBooksClient:
         group_by_room: bool = False,
         sales_tax_item: str = "",
         expense_account: str = "",
+        progress_cb: Optional[Callable[[str], None]] = None,
     ) -> str:
+        # v1.037: progress_cb fires at each meaningful step so the UI can
+        # show line-by-line activity in a streaming log. Callback must be
+        # cheap & non-blocking (caller marshals to the Tk main loop).
+        def _progress(msg: str) -> None:
+            if progress_cb is None:
+                return
+            try:
+                progress_cb(msg)
+            except Exception:
+                log.exception("upload_sales_order: progress_cb raised; continuing")
+
         self.last_created_items = []
+        _progress("Connecting to QuickBooks...")
         self.connect()
         try:
             # Make sure the customer has a default sales-tax item so the
@@ -824,6 +837,7 @@ class QuickBooksClient:
             # customer instead. Best-effort -- logged failures don't block
             # the upload attempt.
             if sales_tax_item:
+                _progress(f"Verifying sales-tax setup for {customer_name}...")
                 self._ensure_customer_tax_item(customer_name, sales_tax_item)
 
             # _clean is module-level (see top of this file) so the customer-
@@ -870,6 +884,7 @@ class QuickBooksClient:
             #   3. If neither is set, fail with a clear message listing the
             #      missing SKUs.
             raw_skus = [row["sku_raw"] for row in line_rows if row["sku_raw"]]
+            _progress(f"Checking which of {len(set(raw_skus))} SKU(s) exist in QuickBooks...")
             existing_items = self._query_existing_items(raw_skus)
             missing_skus = sorted({s for s in raw_skus if s not in existing_items})
             fallback_clean = _clean(fallback_item)
@@ -893,9 +908,11 @@ class QuickBooksClient:
                             cost_by_sku[s] = float(row.get("cost", 0) or 0)
                     created: list[str] = []
                     failed: list[tuple[str, str]] = []
-                    for sku in missing_skus:
+                    _progress(f"Auto-creating {len(missing_skus)} missing item(s) in QuickBooks...")
+                    for ci, sku in enumerate(missing_skus, start=1):
                         line_desc = desc_by_sku.get(sku, "")
                         line_cost = cost_by_sku.get(sku, 0.0)
+                        _progress(f"  Creating item {ci}/{len(missing_skus)}: {sku}")
                         ok, msg = self._add_non_inventory_item(
                             name=sku,
                             desc=line_desc,
@@ -1000,6 +1017,20 @@ class QuickBooksClient:
       <SalesOrderLineAdd>
         <Desc></Desc>
       </SalesOrderLineAdd>"""
+
+            # Stream each line into the progress log so the user sees what
+            # they're shipping to QuickBooks. The actual SalesOrderAdd is a
+            # single atomic request below — the per-line callbacks happen as
+            # the XML is built, not as QB processes each row.
+            _progress(f"Building sales-order XML for {len(line_rows)} line(s)...")
+            for row in line_rows:
+                try:
+                    qty = row["qty"]
+                    rate = row["rate"]
+                    sku_label = row["sku_raw"] or "(blank SKU)"
+                    _progress(f"  Line {row['idx']}/{len(line_rows)}: {sku_label}  qty={qty:g}  rate=${rate:,.2f}")
+                except Exception:
+                    pass
 
             line_xml: list[str] = []
             if group_by_room:
@@ -1139,6 +1170,7 @@ class QuickBooksClient:
                     f"Full XML written to the log."
                 )
 
+            _progress(f"Submitting sales order to QuickBooks ({len(line_rows)} line(s))...")
             try:
                 response = self._process(request_xml)
             except Exception:
@@ -1158,6 +1190,7 @@ class QuickBooksClient:
 
             ref = root.findtext(".//SalesOrderRet/RefNumber", default=sales_order_no)
             txn_id = root.findtext(".//SalesOrderRet/TxnID", default="")
+            _progress(f"Sales order #{ref} created in QuickBooks.")
             return f"Uploaded Sales Order #{ref} (TxnID: {txn_id})"
         finally:
             self.close()
