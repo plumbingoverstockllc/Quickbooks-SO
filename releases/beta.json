@@ -1,6 +1,6 @@
 {
-  "version": "1.031b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.031b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "5791aa577138b5c44ebd6dc1f7a9361987b8b9877d0f08cfa00c9afe4eccb198",
-  "notes": "Each field has a readable minimum width so it never collapses to 'Pr...' or 'C:/Us...'. Window minimum size bumped to 1200x720 to guarantee the form fits. Resize the window larger and the fields grow proportionally."
+  "version": "1.032",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.032/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "15a755e2f39b4cb2eccf2d13e02a935120bda72ddbbe4d7f3b95835dededaa05",
+  "notes": "No separate beta build in flight right now. This entry points to the stable release."
 }

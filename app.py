@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.031b"
+APP_VERSION = "v1.032"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -440,6 +440,15 @@ class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(f"DMQuotes {APP_VERSION} · QuickBooks Sales Orders")
+        # v1.032: bump Tk's global scaling by 25% so every point-sized
+        # font and text metric renders larger uniformly. Pixel-based
+        # sizes (minsize, sidebar width, logo image) are scaled manually
+        # below since Tk scaling doesn't touch those.
+        try:
+            base_scaling = self.root.tk.call("tk", "scaling")
+            self.root.tk.call("tk", "scaling", base_scaling * 1.25)
+        except tk.TclError:
+            pass
         self.style = ttk.Style()
         self.style.theme_use("clam")
         self._configure_styles()
@@ -460,18 +469,17 @@ class SalesOrderApp:
         if saved_geom and self._geometry_fits_screen(saved_geom, screen_w, screen_h):
             self.root.geometry(saved_geom)
         else:
-            win_w = max(1100, int(screen_w * 0.80))
-            win_h = max(720, int(screen_h * 0.75))
+            win_w = max(1380, int(screen_w * 0.80))
+            win_h = max(900, int(screen_h * 0.75))
             x = max(0, (screen_w - win_w) // 2)
             y = max(0, (screen_h - win_h) // 2)
             self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
         try:
-            # v1.031b: bumped from 960×640 to 1200×720 so the
-            # Configuration card's form can never be squeezed below
-            # the point where the field minimum widths fit. Below this
-            # the entries would either truncate to "Pr..." / "C:/Us..."
-            # or overlap the sidebar.
-            self.root.minsize(1200, 720)
+            # v1.032: minsize bumped to 1500×900 to match the 25%-larger
+            # UI scale. The form's natural minimum width grew with the
+            # Tk scaling factor; this floor keeps the entries from
+            # clipping at small window sizes.
+            self.root.minsize(1500, 900)
         except tk.TclError:
             pass
         # Persist window size + position on close so future launches
@@ -1716,7 +1724,7 @@ class SalesOrderApp:
         body = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
         body.pack(fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=c["bg_sidebar"], width=180, highlightthickness=0, bd=0)
+        sidebar = tk.Frame(body, bg=c["bg_sidebar"], width=225, highlightthickness=0, bd=0)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         sidebar_border = tk.Frame(body, bg=c["border"], width=1)
@@ -1996,7 +2004,7 @@ class SalesOrderApp:
                 from PIL import Image, ImageTk
                 pil_img = Image.open(str(logo_path))
                 # Resize to fit comfortably in the sidebar width.
-                target = 150
+                target = 188
                 pil_img = pil_img.convert("RGBA")
                 pil_img.thumbnail((target, target), Image.LANCZOS)
                 self._sidebar_logo_image = ImageTk.PhotoImage(pil_img)

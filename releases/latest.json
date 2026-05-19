@@ -1,6 +1,6 @@
 {
-  "version": "1.021",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.021/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "02a4dfd5aa34d8ca9d721e80a5857f861d249a8da8865b41ee2dcabc823be9b4",
-  "notes": "Fixes a startup crash in v1.020 where the saved-window-size code ran before settings were loaded."
+  "version": "1.032",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.032/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "15a755e2f39b4cb2eccf2d13e02a935120bda72ddbbe4d7f3b95835dededaa05",
+  "notes": "The whole UI is now 25% larger and more readable. Includes everything from the recent beta cycle: DMQuotes rebrand with the new sidebar logo, two-tone layout, three-row form (Source File + Customer + Sales Order No + Fetch on top, dates in the middle, terms/shipping/currency/tax/income at the bottom), Save As dialog when exporting, and a window minimum size that keeps every field readable."
 }
