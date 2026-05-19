@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.028b"
+APP_VERSION = "v1.029b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2090,26 +2090,33 @@ class SalesOrderApp:
         parent.columnconfigure(1, weight=1)
 
     def _path_row_inline(self, parent, label, var, browse_cmd):
-        """Compact path row used when two paths share a horizontal slot.
+        """Compact path row: label on top, entry + Browse button below.
 
-        Layout: [Label][Entry stretches][Browse]
+        Uses pack so the Browse button always claims its natural width
+        first (right side) and the Entry expands to fill whatever's left.
+        Setting width=1 on the Entry removes its 20-character minimum so
+        the row shrinks gracefully when the parent is narrow.
         """
-        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(2, 1)
+        ttk.Label(parent, text=label, style="FieldLabel.TLabel").pack(
+            anchor="w", padx=4, pady=(2, 1)
         )
-        ttk.Entry(parent, textvariable=var).grid(
-            row=1, column=0, sticky="ew", padx=(4, 6), pady=(0, 2)
+        row = ttk.Frame(parent, style="Card.TFrame")
+        row.pack(fill="x", padx=4, pady=(0, 2))
+        ttk.Button(
+            row, text="Browse", command=browse_cmd, style="Quiet.TButton"
+        ).pack(side="right", padx=(6, 0))
+        ttk.Entry(row, textvariable=var, width=1).pack(
+            side="left", fill="x", expand=True
         )
-        ttk.Button(parent, text="Browse", command=browse_cmd, style="Quiet.TButton").grid(
-            row=1, column=1, sticky="e", padx=(0, 4), pady=(0, 2)
-        )
-        parent.columnconfigure(0, weight=1)
 
     def _form_entry(self, parent, label, var, row, col, span):
         ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
             row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
         )
-        entry = ttk.Entry(parent, textvariable=var)
+        # width=1 strips the 20-character minimum; sticky="ew" expands the
+        # entry to fill the cell. Without this, narrow form cells push past
+        # their column allocation and clip neighbouring widgets.
+        entry = ttk.Entry(parent, textvariable=var, width=1)
         entry.grid(
             row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
@@ -2123,16 +2130,18 @@ class SalesOrderApp:
         )
         wrap = ttk.Frame(parent, style="Card.TFrame")
         wrap.grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4))
-        wrap.columnconfigure(0, weight=1)
-        entry = ttk.Entry(wrap, textvariable=var)
-        entry.grid(row=0, column=0, sticky="ew")
+        # pack the picker first (side=right reserves its width), then the
+        # Entry fills the rest. Same pattern as the path row so neither
+        # widget gets squeezed off-screen on a narrow window.
         ttk.Button(
             wrap,
             text="📅",
             width=3,
             command=lambda v=var: self._open_date_picker(v),
             style="Quiet.TButton",
-        ).grid(row=0, column=1, sticky="e", padx=(4, 0))
+        ).pack(side="right", padx=(4, 0))
+        entry = ttk.Entry(wrap, textvariable=var, width=1)
+        entry.pack(side="left", fill="x", expand=True)
         return entry
 
     def _open_date_picker(self, var: tk.StringVar) -> None:

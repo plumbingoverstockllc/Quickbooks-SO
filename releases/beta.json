@@ -1,6 +1,6 @@
 {
-  "version": "1.028b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.028b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "ba49bd0bf6f553537396e631f46255ad7e5f78071a9b2f8c514eb0460e225978",
-  "notes": "Output File field removed from the Configuration card. Export for SaaSant and Export Template now pop a Save As dialog at export time, pre-filled with a SalesOrder_<SO>_<date>.xlsx name and your last-used folder."
+  "version": "1.029b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.029b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "f1eefa035b722da02e0079f93c41976bc10ca5d5e558d58ab7cfceb238e9e934",
+  "notes": "Form fields shrink properly to fit the window. The Source File Browse button and Due Date calendar picker no longer get clipped on narrower windows."
 }
