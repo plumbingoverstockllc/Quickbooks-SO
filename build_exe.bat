@@ -19,7 +19,12 @@ REM The earlier --onedir invocation was overwritten by --onefile anyway, so
 REM dropping it cuts the build time roughly in half.
 REM --add-data bundles the brand PNG next to the bootstrap in the onefile
 REM build. Syntax is "<src>;<dest>" on Windows (semicolon, not colon).
-"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" %COLLECT% --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." app.py
+REM --splash shows the logo immediately when the .exe is launched, while
+REM PyInstaller's bootloader unpacks the bundle to %TEMP%. Without this
+REM there's a 3-5 second window where the user sees nothing and assumes
+REM the launch failed. app.py calls pyi_splash.close() once the main
+REM window is up.
+"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" %COLLECT% --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." app.py
 
 if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (
   "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer.iss"

@@ -1,6 +1,6 @@
 {
-  "version": "1.037",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.037/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "3723c6a0df0192ea87c033e404587cc226b7384bb097788872a29a6fbd2ba1e6",
-  "notes": "Upload to QuickBooks now shows a live progress dialog that streams each step line by line (item lookups, auto-creates, every order line, the final SalesOrderAdd). When the upload finishes the dialog flips to a green Done state with a single Done button. Stable updates are now forced — when an update is available the dialog has a single OK button (no Not Now) and the user is taken straight into the installer."
+  "version": "1.038",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.038/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "734d0c9449b1808bd6fc17e813df7b8d224522022ba88692f06c1c86aed5726c",
+  "notes": "Adds a splash screen that shows the DMQuotes logo the instant the .exe is launched, so the 3-5 second PyInstaller unpack window no longer looks like nothing happened. The splash is dismissed automatically once the main window is painted."
 }

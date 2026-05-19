@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.037"
+APP_VERSION = "v1.038"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -3194,9 +3194,34 @@ class SalesOrderApp:
         threading.Thread(target=worker, daemon=True).start()
 
 
+def _close_pyi_splash() -> None:
+    """Dismiss the PyInstaller --splash image once the main window is up.
+    pyi_splash is a runtime module that ONLY exists in --splash-built
+    binaries; in plain `python app.py` dev runs the import simply fails
+    and we move on.
+    """
+    try:
+        import pyi_splash  # type: ignore[import-not-found]
+    except Exception:
+        return
+    try:
+        if pyi_splash.is_alive():
+            pyi_splash.close()
+    except Exception:
+        log.exception("_close_pyi_splash: pyi_splash.close() raised")
+
+
 def main():
     root = tk.Tk()
-    SalesOrderApp(root)
+    app = SalesOrderApp(root)
+    # Paint the main window once before tearing down the splash so the
+    # transition is splash -> visible UI, not splash -> blank flash -> UI.
+    try:
+        root.update_idletasks()
+        root.update()
+    except tk.TclError:
+        pass
+    _close_pyi_splash()
     root.mainloop()
 
 
