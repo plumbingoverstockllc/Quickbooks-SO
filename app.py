@@ -33,8 +33,8 @@ from transformer import (
 DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabkowski301NHighland (1).xls"
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
-APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.024b"
+APP_NAME = "DMQuotes"
+APP_VERSION = "v1.025b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -43,7 +43,12 @@ IS_BETA = APP_VERSION.strip().lower().endswith("b") or "beta" in APP_VERSION.low
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 BETA_UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/beta.json"
-SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_NAME
+# v1.025b: app was renamed from "QB Sales Order Converter" to "DMQuotes".
+# Settings/log directory keeps the legacy name so existing users' saved
+# configuration (brand multipliers, file paths, window geometry, etc.)
+# carries over without a migration step.
+LEGACY_SETTINGS_FOLDER = "QB Sales Order Converter"
+SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / LEGACY_SETTINGS_FOLDER
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 LOG_PATH = SETTINGS_DIR / "app.log"
 
@@ -422,7 +427,7 @@ class RowEditorDialog(tk.Toplevel):
 class SalesOrderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title(f"QuickBooks Sales Order Converter {APP_VERSION}")
+        self.root.title(f"DMQuotes {APP_VERSION} · QuickBooks Sales Orders")
         self.style = ttk.Style()
         self.style.theme_use("clam")
         self._configure_styles()
@@ -986,7 +991,8 @@ class SalesOrderApp:
             label="About",
             command=lambda: messagebox.showinfo(
                 "About",
-                f"{APP_NAME} {APP_VERSION}\n\n"
+                f"{APP_NAME} {APP_VERSION}\n"
+                "QuickBooks Sales Order Uploader\n\n"
                 "Created by Moshe Adelman\n"
                 "For help email hello@shimiralabs.com\n"
                 "Shimiralabs.com",
@@ -1693,7 +1699,7 @@ class SalesOrderApp:
         body = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
         body.pack(fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=c["bg_sidebar"], width=160, highlightthickness=0, bd=0)
+        sidebar = tk.Frame(body, bg=c["bg_sidebar"], width=180, highlightthickness=0, bd=0)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         sidebar_border = tk.Frame(body, bg=c["border"], width=1)
@@ -1943,54 +1949,113 @@ class SalesOrderApp:
         ttk.Label(status_bar, textvariable=self.status_var, style="Status.TLabel").pack(anchor="w")
 
     def _build_sidebar(self, sidebar: tk.Frame) -> None:
-        """Draw the brand block at the top of the left sidebar: rounded
-        accent square logo with 'SO' in white, the wordmark below, and
-        the version line at the very bottom."""
+        """DMQuotes brand block: blue document icon flowing into a green
+        ring with an = sign, then the DMQuotes wordmark below (DM blue,
+        Quotes green), tagline 'INTO QUICKBOOKS', and finally the
+        Shimiralabs + version pinned at the bottom."""
         c = UI
+        brand_blue = "#1E47B6"
+        brand_green = "#1FA049"
 
         # Top spacer so the logo doesn't kiss the accent strip.
-        tk.Frame(sidebar, bg=c["bg_sidebar"], height=20).pack(side="top")
+        tk.Frame(sidebar, bg=c["bg_sidebar"], height=22).pack(side="top")
 
-        logo_size = 64
+        logo_w, logo_h = 140, 64
         logo = tk.Canvas(
             sidebar,
-            width=logo_size,
-            height=logo_size,
+            width=logo_w,
+            height=logo_h,
             bg=c["bg_sidebar"],
             highlightthickness=0,
             bd=0,
         )
         logo.pack(side="top")
-        self._draw_rounded_rect(logo, 4, 4, logo_size - 4, logo_size - 4, radius=14, fill=c["accent"])
-        # Slight inner highlight to give the badge depth.
-        logo.create_oval(
-            logo_size // 2 - 6, 10, logo_size // 2 + 14, 28,
-            fill=c["accent_light"], outline="",
+
+        # --- Document icon (blue), left side ---
+        doc_x, doc_y, doc_w, doc_h = 8, 8, 36, 48
+        fold = 10  # corner-fold size
+        # Body outline as a polygon with a folded corner.
+        logo.create_polygon(
+            doc_x, doc_y,
+            doc_x + doc_w - fold, doc_y,
+            doc_x + doc_w, doc_y + fold,
+            doc_x + doc_w, doc_y + doc_h,
+            doc_x, doc_y + doc_h,
+            outline=brand_blue, width=3, fill="", smooth=False,
         )
-        logo.create_text(
-            logo_size // 2,
-            logo_size // 2 + 2,
-            text="SO",
-            fill="#FFFFFF",
-            font=("Segoe UI Black", 22),
+        # The fold itself (small triangle in top-right).
+        logo.create_line(
+            doc_x + doc_w - fold, doc_y,
+            doc_x + doc_w - fold, doc_y + fold,
+            doc_x + doc_w, doc_y + fold,
+            fill=brand_blue, width=3,
+        )
+        # Three horizontal text lines inside.
+        for i, ly in enumerate((doc_y + 20, doc_y + 28, doc_y + 36)):
+            right_pad = 6 if i < 2 else 14
+            logo.create_line(doc_x + 6, ly, doc_x + doc_w - right_pad, ly,
+                             fill=brand_blue, width=3, capstyle="round")
+
+        # --- Arrow, middle ---
+        arrow_y = doc_y + doc_h // 2
+        # Three motion dashes to the left of the arrowhead, gradient-ish.
+        for dash_i, (x_start, x_end, dash_color) in enumerate((
+            (doc_x + doc_w + 4, doc_x + doc_w + 10, brand_blue),
+            (doc_x + doc_w + 12, doc_x + doc_w + 22, "#2A6CCC"),
+            (doc_x + doc_w + 24, doc_x + doc_w + 36, "#3B91A0"),
+        )):
+            logo.create_line(x_start, arrow_y, x_end, arrow_y,
+                             fill=dash_color, width=4, capstyle="round")
+        # Main arrow body + head, ending at the ring's left edge.
+        ring_x = 92
+        ring_r = 18
+        logo.create_line(
+            doc_x + doc_w + 38, arrow_y,
+            ring_x - 2, arrow_y,
+            fill=brand_green, width=4, capstyle="round",
+            arrow="last", arrowshape=(10, 12, 5),
         )
 
-        # Wordmark.
+        # --- Green ring with "=" inside, right side ---
+        ring_cx, ring_cy = ring_x + ring_r, arrow_y
+        # Two open arcs that don't quite close (gap at top-right and
+        # bottom-left), echoing the source logo.
+        logo.create_arc(
+            ring_cx - ring_r, ring_cy - ring_r,
+            ring_cx + ring_r, ring_cy + ring_r,
+            start=20, extent=150, style="arc", outline=brand_green, width=3,
+        )
+        logo.create_arc(
+            ring_cx - ring_r, ring_cy - ring_r,
+            ring_cx + ring_r, ring_cy + ring_r,
+            start=200, extent=150, style="arc", outline=brand_green, width=3,
+        )
+        # = sign in the middle.
+        logo.create_line(ring_cx - 7, ring_cy - 4, ring_cx + 7, ring_cy - 4,
+                         fill=brand_green, width=2, capstyle="round")
+        logo.create_line(ring_cx - 7, ring_cy + 4, ring_cx + 7, ring_cy + 4,
+                         fill=brand_green, width=2, capstyle="round")
+
+        # --- Wordmark (DM blue + Quotes green) ---
+        wordmark = tk.Frame(sidebar, bg=c["bg_sidebar"])
+        wordmark.pack(side="top", pady=(12, 0))
         tk.Label(
-            sidebar, text="QuickBooks",
-            bg=c["bg_sidebar"], fg=c["text_secondary"],
-            font=("Segoe UI", 9, "normal"),
-        ).pack(pady=(14, 0))
+            wordmark, text="DM",
+            bg=c["bg_sidebar"], fg=brand_blue,
+            font=("Segoe UI Black", 18),
+        ).pack(side="left")
         tk.Label(
-            sidebar, text="Sales Order",
-            bg=c["bg_sidebar"], fg=c["text_primary"],
-            font=("Segoe UI Semibold", 12),
-        ).pack()
+            wordmark, text="Quotes",
+            bg=c["bg_sidebar"], fg=brand_green,
+            font=("Segoe UI Black", 18),
+        ).pack(side="left")
+
+        # --- Tagline ---
         tk.Label(
-            sidebar, text="Converter",
-            bg=c["bg_sidebar"], fg=c["text_primary"],
-            font=("Segoe UI Semibold", 12),
-        ).pack()
+            sidebar, text="INTO QUICKBOOKS",
+            bg=c["bg_sidebar"], fg=brand_blue,
+            font=("Segoe UI Semibold", 8),
+        ).pack(side="top", pady=(2, 0))
 
         # Version pinned near the bottom.
         tk.Label(

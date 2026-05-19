@@ -1,7 +1,7 @@
-#define MyAppName "QB Sales Order Converter"
-#define MyAppVersion "1.024b"
-#define MyAppPublisher "Moshe Adelman DBA RunByItself.com"
-#define MyAppExeName "QB Sales Order Converter.exe"
+#define MyAppName "DMQuotes"
+#define MyAppVersion "1.025b"
+#define MyAppPublisher "Moshe Adelman / Shimiralabs"
+#define MyAppExeName "DMQuotes.exe"
 
 [Setup]
 AppId={{A95D8E38-BAAD-46F2-9666-C3A808B2C3B6}

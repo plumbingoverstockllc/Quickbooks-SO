@@ -17,7 +17,7 @@ set "COLLECT=--collect-all numpy --collect-all pandas --collect-all openpyxl --c
 REM We only ship the --onefile build (installer.iss sources dist\*.exe).
 REM The earlier --onedir invocation was overwritten by --onefile anyway, so
 REM dropping it cuts the build time roughly in half.
-"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "QB Sales Order Converter" %COLLECT% app.py
+"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" %COLLECT% app.py
 
 if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (
   "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer.iss"

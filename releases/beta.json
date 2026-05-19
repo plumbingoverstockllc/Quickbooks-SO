@@ -1,6 +1,6 @@
 {
-  "version": "1.024b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.024b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "bb995259fe8ba1def01521340956589b591ac3ad677410ac6bda96a56f86aded",
-  "notes": "Startup freeze fixed - the QuickBooks auto-connect now runs on a background thread so the window is responsive immediately. The sidebar has its own clearly darker background so the two-tone split is visible. The Validation Messages box is shorter by default so the action buttons aren't pushed down by it."
+  "version": "1.025b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.025b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "55bb9ca5ab6e6fdcca1435a9297b48d1dc458279f2d99ad1c5ff6bfb31e95e61",
+  "notes": "Renamed to DMQuotes. New logo in the sidebar shows a blue document flowing into a green ring with an = sign, matching the brand. Wordmark below reads DMQuotes (DM blue, Quotes green) with INTO QUICKBOOKS as the tagline. Existing settings (paths, brand multipliers, window geometry) carry over - they live in the same folder."
 }
