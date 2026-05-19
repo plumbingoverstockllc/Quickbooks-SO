@@ -1,6 +1,6 @@
 {
-  "version": "1.023b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.023b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4a517b5256161ecec440f8ada0920ebdbd778b6e03a91abb877a3b2198a4c8e6",
-  "notes": "Two-tone layout. A slim sidebar runs down the left side with a rounded SO logo at the top, the wordmark below, and Shimiralabs + the version at the bottom. The main content area keeps the form, action row, and preview, with a thin divider between."
+  "version": "1.024b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.024b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "bb995259fe8ba1def01521340956589b591ac3ad677410ac6bda96a56f86aded",
+  "notes": "Startup freeze fixed - the QuickBooks auto-connect now runs on a background thread so the window is responsive immediately. The sidebar has its own clearly darker background so the two-tone split is visible. The Validation Messages box is shorter by default so the action buttons aren't pushed down by it."
 }

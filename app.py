@@ -34,7 +34,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "QB Sales Order Converter"
-APP_VERSION = "v1.023b"
+APP_VERSION = "v1.024b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -73,11 +73,12 @@ log.info("Settings dir: %s", SETTINGS_DIR)
 log.info("Log file: %s", LOG_PATH)
 
 UI = {
-    "bg_window": "#F5F7FA",
+    "bg_window": "#FFFFFF",
     "bg_card": "#FFFFFF",
     "bg_subtle": "#F2F4F8",
     "bg_hover": "#EDF2FB",
     "bg_pressed": "#DEE7F5",
+    "bg_sidebar": "#E5EAF2",
     "border": "#E5E9F0",
     "border_strong": "#CDD3DC",
     "border_inner_light": "#FFFFFF",
@@ -1692,7 +1693,7 @@ class SalesOrderApp:
         body = tk.Frame(root, bg=c["bg_window"], highlightthickness=0, bd=0)
         body.pack(fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=c["bg_subtle"], width=160, highlightthickness=0, bd=0)
+        sidebar = tk.Frame(body, bg=c["bg_sidebar"], width=160, highlightthickness=0, bd=0)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         sidebar_border = tk.Frame(body, bg=c["border"], width=1)
@@ -1755,7 +1756,7 @@ class SalesOrderApp:
             font=("Segoe UI", 10),
             padx=6,
             pady=6,
-            height=12,
+            height=6,
         )
         self.error_text.pack(fill="both", expand=True)
 
@@ -1948,14 +1949,14 @@ class SalesOrderApp:
         c = UI
 
         # Top spacer so the logo doesn't kiss the accent strip.
-        tk.Frame(sidebar, bg=c["bg_subtle"], height=20).pack(side="top")
+        tk.Frame(sidebar, bg=c["bg_sidebar"], height=20).pack(side="top")
 
         logo_size = 64
         logo = tk.Canvas(
             sidebar,
             width=logo_size,
             height=logo_size,
-            bg=c["bg_subtle"],
+            bg=c["bg_sidebar"],
             highlightthickness=0,
             bd=0,
         )
@@ -1977,31 +1978,31 @@ class SalesOrderApp:
         # Wordmark.
         tk.Label(
             sidebar, text="QuickBooks",
-            bg=c["bg_subtle"], fg=c["text_secondary"],
+            bg=c["bg_sidebar"], fg=c["text_secondary"],
             font=("Segoe UI", 9, "normal"),
         ).pack(pady=(14, 0))
         tk.Label(
             sidebar, text="Sales Order",
-            bg=c["bg_subtle"], fg=c["text_primary"],
+            bg=c["bg_sidebar"], fg=c["text_primary"],
             font=("Segoe UI Semibold", 12),
         ).pack()
         tk.Label(
             sidebar, text="Converter",
-            bg=c["bg_subtle"], fg=c["text_primary"],
+            bg=c["bg_sidebar"], fg=c["text_primary"],
             font=("Segoe UI Semibold", 12),
         ).pack()
 
         # Version pinned near the bottom.
         tk.Label(
             sidebar, text=APP_VERSION,
-            bg=c["bg_subtle"], fg=c["text_tertiary"],
+            bg=c["bg_sidebar"], fg=c["text_tertiary"],
             font=("Segoe UI", 9),
         ).pack(side="bottom", pady=(0, 12))
 
         # Subtle "made by" line above the version.
         tk.Label(
             sidebar, text="Shimiralabs",
-            bg=c["bg_subtle"], fg=c["text_tertiary"],
+            bg=c["bg_sidebar"], fg=c["text_tertiary"],
             font=("Segoe UI", 8),
         ).pack(side="bottom")
 
@@ -2331,9 +2332,37 @@ class SalesOrderApp:
         )
 
     def _connect_quickbooks_on_startup(self):
-        log.info("Auto-connect on startup")
+        log.info("Auto-connect on startup (background)")
         self._set_qb_status("Connecting...", state="pending")
-        self.connect_quickbooks(silent=True)
+        threading.Thread(target=self._silent_connect_worker, daemon=True).start()
+
+    def _silent_connect_worker(self):
+        """Run the auto-connect QuickBooks attempt off the main thread so
+        the UI stays responsive during the SDK call (which can take 5+
+        seconds). UI updates are marshaled back via root.after."""
+        try:
+            company_name = self._qb_client().test_connection()
+        except Exception as exc:
+            log.warning("Auto-connect: silent attempt failed — %s", exc)
+            self.root.after(0, self._on_silent_connect_failed)
+            return
+        log.info("Auto-connect: silent success, company=%r", company_name)
+        self.root.after(0, lambda n=company_name: self._on_silent_connect_success(n))
+
+    def _on_silent_connect_success(self, company_name: str) -> None:
+        self._set_qb_status(f"Connected: {company_name}", state="connected")
+        self._set_status(f"Connected to QuickBooks company: {company_name}")
+        if not self.auto_connect_on_startup:
+            log.info("Auto-connect: enabling auto-connect on future startups")
+            self.auto_connect_on_startup = True
+            try:
+                self._persist_settings()
+            except Exception:
+                log.exception("Auto-connect: failed to persist auto-connect flag")
+
+    def _on_silent_connect_failed(self) -> None:
+        self._set_qb_status(self._not_connected_message(), state="disconnected")
+        self._set_status("QuickBooks auto-connect failed. Use Setup → Connect to QuickBooks Desktop to retry.")
 
     def connect_quickbooks(self, silent: bool = False):
         log.info(
