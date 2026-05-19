@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.032"
+APP_VERSION = "v1.033"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1809,24 +1809,23 @@ class SalesOrderApp:
             form.columnconfigure(i, weight=1)
 
         # --- Row 0/1: Source File, Customer, Sales Order No, Fetch ---
-        # Source File occupies cols 0-6 (label on row 0, entry+browse on
-        # row 1). Nested frame because the entry+browse pair needs pack
-        # to keep the Browse button from being clipped.
+        # Reshuffled v1.033 to make Customer noticeably longer. Spans
+        # now sum to 16 as: Source 5 | Customer 5 | SO No 3 | Fetch 3.
         src_label = ttk.Label(form, text="Source File", style="FieldLabel.TLabel")
-        src_label.grid(row=0, column=0, columnspan=7, sticky="w", padx=4, pady=(4, 1))
+        src_label.grid(row=0, column=0, columnspan=5, sticky="w", padx=4, pady=(4, 1))
         src_row = ttk.Frame(form, style="Card.TFrame")
-        src_row.grid(row=1, column=0, columnspan=7, sticky="ew", padx=4, pady=(0, 4))
+        src_row.grid(row=1, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 4))
         ttk.Button(
             src_row, text="Browse", command=self._browse_source, style="Quiet.TButton"
         ).pack(side="right", padx=(6, 0))
-        # width=24 — long enough to show ~24 chars of a path before
+        # width=20 — long enough to show ~20 chars of a path before
         # truncation kicks in. sticky/fill still lets it grow.
-        ttk.Entry(src_row, textvariable=self.source_path_var, width=24).pack(
+        ttk.Entry(src_row, textvariable=self.source_path_var, width=20).pack(
             side="left", fill="x", expand=True
         )
 
         customer_entry = self._form_entry(
-            form, "Customer", self.customer_var, 0, 7, 3, min_chars=14
+            form, "Customer", self.customer_var, 0, 5, 5, min_chars=24
         )
         so_no_entry = self._form_entry(
             form, "Sales Order No", self.sales_order_no_var, 0, 10, 3, min_chars=8
