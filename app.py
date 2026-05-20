@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.041"
+APP_VERSION = "v1.042"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -66,15 +66,41 @@ LOG_PATH = SETTINGS_DIR / "app.log"
 #   - IMPORT_OVERHEAD_SECONDS: what the import actually costs the user in
 #     attention (clicking Upload, watching it finish). Subtracted so the
 #     number we quote is honest net savings, not gross manual time.
+#   - MANUAL_SECONDS_PER_ROOM: each room group needs a header line the user
+#     would otherwise have to type BY HAND — room name in ALL CAPS, wrapped
+#     in ** markers, plus the blank separator lines between groups. Fiddly
+#     and easy to typo, so it carries its own per-room penalty.
 MANUAL_SECONDS_PER_LINE = 35
 MANUAL_HEADER_OVERHEAD_SECONDS = 45
+MANUAL_SECONDS_PER_ROOM = 25
 IMPORT_OVERHEAD_SECONDS = 10
 
 
-def _estimate_manual_seconds(num_lines: int) -> int:
-    """Estimated seconds to enter `num_lines` line items by hand, header
-    included."""
-    return max(0, num_lines) * MANUAL_SECONDS_PER_LINE + MANUAL_HEADER_OVERHEAD_SECONDS
+def _count_room_groups(lines) -> int:
+    """Count how many **ROOM** header lines the upload inserts — i.e. the
+    number of contiguous room groups, matching the grouping logic in
+    quickbooks_client.upload_sales_order. Each one is a header the user
+    would have had to type (in caps, with ** markers) by hand."""
+    groups = 0
+    current_room = None
+    for line in lines or []:
+        room = ""
+        if isinstance(line, dict):
+            room = str(line.get("Room", "") or "").strip()
+        if current_room is None or room != current_room:
+            groups += 1
+            current_room = room
+    return groups
+
+
+def _estimate_manual_seconds(num_lines: int, num_rooms: int = 0) -> int:
+    """Estimated seconds to enter `num_lines` line items (plus `num_rooms`
+    hand-typed room headers) by hand, order header included."""
+    return (
+        max(0, num_lines) * MANUAL_SECONDS_PER_LINE
+        + max(0, num_rooms) * MANUAL_SECONDS_PER_ROOM
+        + MANUAL_HEADER_OVERHEAD_SECONDS
+    )
 
 
 def _format_duration(total_seconds: int) -> str:
@@ -3321,24 +3347,19 @@ class SalesOrderApp:
                 append_log("", tag="muted")
                 append_log(state["result"] or "Upload complete.", tag="ok")
                 # The whole point of the app: prove how much hand-keying it
-                # just saved. Compares estimated manual entry time against the
-                # near-instant import. Shown for every order — yes, even the
-                # little ones under 10 lines.
+                # just saved. Shown for every order — yes Spencer, even the
+                # little ones under 10 lines. Also mirrored into the
+                # Validation Messages panel on the main window.
                 try:
-                    num_lines = len(upload_kwargs.get("lines") or [])
-                    saved = _estimate_manual_seconds(num_lines) - IMPORT_OVERHEAD_SECONDS
-                    if saved > 0 and num_lines > 0:
+                    lines = upload_kwargs.get("lines") or []
+                    num_lines = len(lines)
+                    num_rooms = _count_room_groups(lines)
+                    saved_lines = self._time_saved_message_lines(num_lines, num_rooms)
+                    if saved_lines:
                         append_log("", tag="muted")
-                        append_log(
-                            f"You just saved {_format_duration(saved)} using this import.",
-                            tag="ok",
-                        )
-                        append_log(
-                            f"(Hand-keying {num_lines} line"
-                            f"{'s' if num_lines != 1 else ''} into QuickBooks would have "
-                            f"taken about {_format_duration(_estimate_manual_seconds(num_lines))}.)",
-                            tag="muted",
-                        )
+                        for ln in saved_lines:
+                            append_log(ln, tag="ok")
+                        self._show_time_saved_in_validation(saved_lines)
                 except Exception:
                     log.exception("time-saved estimate failed; skipping")
             done_btn.configure(state="normal")
@@ -3378,6 +3399,48 @@ class SalesOrderApp:
             pass
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _time_saved_message_lines(self, num_lines: int, num_rooms: int) -> list[str]:
+        """Build the cheeky 'you just saved …' blurb, addressed to Spencer,
+        for the post-upload Done screen and the Validation Messages panel.
+        Returns an empty list when there's nothing meaningful to brag about.
+        """
+        if num_lines <= 0:
+            return []
+        manual = _estimate_manual_seconds(num_lines, num_rooms)
+        saved = manual - IMPORT_OVERHEAD_SECONDS
+        if saved <= 0:
+            return []
+
+        line_word = "line" if num_lines == 1 else "lines"
+        lines = [
+            f"Hey Spencer — you just saved {_format_duration(saved)} with this import.",
+        ]
+        if num_rooms > 0:
+            room_word = "room" if num_rooms == 1 else "rooms"
+            lines.append(
+                f"Typing those {num_lines} {line_word} into QuickBooks by hand — plus "
+                f"keying {num_rooms} {room_word} in ALL CAPS and wrapping each in ** "
+                f"yourself — would've taken about {_format_duration(manual)}."
+            )
+        else:
+            lines.append(
+                f"Typing those {num_lines} {line_word} into QuickBooks by hand would've "
+                f"taken about {_format_duration(manual)}."
+            )
+        lines.append("Still think the small orders aren't worth it? :)")
+        return lines
+
+    def _show_time_saved_in_validation(self, saved_lines: list[str]) -> None:
+        """Mirror the time-saved blurb into the Validation Messages panel on
+        the main window, after the upload succeeds."""
+        if not saved_lines:
+            return
+        try:
+            self.error_text.delete("1.0", tk.END)
+            self.error_text.insert(tk.END, "\n".join(saved_lines))
+        except tk.TclError:
+            log.debug("_show_time_saved_in_validation: error_text not available")
 
 
 def _close_pyi_splash() -> None:
