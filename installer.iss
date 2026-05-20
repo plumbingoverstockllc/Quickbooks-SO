@@ -1,5 +1,5 @@
 #define MyAppName "DMQuotes"
-#define MyAppVersion "1.040"
+#define MyAppVersion "1.041"
 #define MyAppPublisher "Moshe Adelman / Shimiralabs"
 #define MyAppExeName "DMQuotes.exe"
 

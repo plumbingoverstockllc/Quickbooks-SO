@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.040"
+APP_VERSION = "v1.041"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -52,6 +52,42 @@ LEGACY_SETTINGS_FOLDER = "QB Sales Order Converter"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / LEGACY_SETTINGS_FOLDER
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 LOG_PATH = SETTINGS_DIR / "app.log"
+
+
+# --- "Time saved" estimate -------------------------------------------------
+# Rough model of how long it takes a person at an average pace to key a sales
+# order into QuickBooks Desktop by hand instead of importing it. Used for the
+# friendly "you just saved X min Y sec" message after a successful upload.
+#   - SECONDS_PER_LINE: copy/paste + tab through SKU, description, qty, rate,
+#     and tax code for one line, then fix the inevitable typo. 35s is a
+#     conservative average — try doing 40 lines and you'll wish it were lower.
+#   - HEADER_OVERHEAD_SECONDS: customer lookup, SO number, both dates, terms,
+#     and shipping method on the order header before any line is even touched.
+#   - IMPORT_OVERHEAD_SECONDS: what the import actually costs the user in
+#     attention (clicking Upload, watching it finish). Subtracted so the
+#     number we quote is honest net savings, not gross manual time.
+MANUAL_SECONDS_PER_LINE = 35
+MANUAL_HEADER_OVERHEAD_SECONDS = 45
+IMPORT_OVERHEAD_SECONDS = 10
+
+
+def _estimate_manual_seconds(num_lines: int) -> int:
+    """Estimated seconds to enter `num_lines` line items by hand, header
+    included."""
+    return max(0, num_lines) * MANUAL_SECONDS_PER_LINE + MANUAL_HEADER_OVERHEAD_SECONDS
+
+
+def _format_duration(total_seconds: int) -> str:
+    """Human phrasing like '6 minutes and 35 seconds' / '45 seconds'."""
+    total_seconds = max(0, int(round(total_seconds)))
+    minutes, seconds = divmod(total_seconds, 60)
+    min_part = f"{minutes} minute{'s' if minutes != 1 else ''}"
+    sec_part = f"{seconds} second{'s' if seconds != 1 else ''}"
+    if minutes and seconds:
+        return f"{min_part} and {sec_part}"
+    if minutes:
+        return min_part
+    return sec_part
 
 
 def _resource_path(filename: str) -> Path:
@@ -3284,6 +3320,27 @@ class SalesOrderApp:
                 header.config(text="Done — sales order uploaded", fg=c["success"])
                 append_log("", tag="muted")
                 append_log(state["result"] or "Upload complete.", tag="ok")
+                # The whole point of the app: prove how much hand-keying it
+                # just saved. Compares estimated manual entry time against the
+                # near-instant import. Shown for every order — yes, even the
+                # little ones under 10 lines.
+                try:
+                    num_lines = len(upload_kwargs.get("lines") or [])
+                    saved = _estimate_manual_seconds(num_lines) - IMPORT_OVERHEAD_SECONDS
+                    if saved > 0 and num_lines > 0:
+                        append_log("", tag="muted")
+                        append_log(
+                            f"You just saved {_format_duration(saved)} using this import.",
+                            tag="ok",
+                        )
+                        append_log(
+                            f"(Hand-keying {num_lines} line"
+                            f"{'s' if num_lines != 1 else ''} into QuickBooks would have "
+                            f"taken about {_format_duration(_estimate_manual_seconds(num_lines))}.)",
+                            tag="muted",
+                        )
+                except Exception:
+                    log.exception("time-saved estimate failed; skipping")
             done_btn.configure(state="normal")
             dlg.protocol("WM_DELETE_WINDOW", finish)
             dlg.bind("<Return>", lambda e: finish())
