@@ -1,6 +1,6 @@
 {
-  "version": "1.042",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.042/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4f2bcd7a4f6066245bd9de11283beb8d12c79567002ffcc6a5764168ecb59a2c",
-  "notes": "The time-saved message now also appears in the Validation Messages panel after an upload, addresses Spencer directly, and factors in the room headers you'd otherwise have to type in ALL CAPS with ** by hand."
+  "version": "1.043",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.043/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "7df0c195b430223c2290044e3c1a6c2a30f2b7873b5503a3197eb05dd738ab8b",
+  "notes": "Time-saved message now compares the by-hand estimate against the actual measured import time ('this would have taken you X by hand; the import took Y'). After a successful upload the app also asks whether to delete the downloaded order file from David Meyer, and deletes it for you if you say yes."
 }

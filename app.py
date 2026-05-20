@@ -6,6 +6,7 @@ import logging.handlers
 import os
 import re
 import sys
+import time
 import hashlib
 import threading
 import subprocess
@@ -35,7 +36,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.042"
+APP_VERSION = "v1.043"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -63,17 +64,15 @@ LOG_PATH = SETTINGS_DIR / "app.log"
 #     conservative average — try doing 40 lines and you'll wish it were lower.
 #   - HEADER_OVERHEAD_SECONDS: customer lookup, SO number, both dates, terms,
 #     and shipping method on the order header before any line is even touched.
-#   - IMPORT_OVERHEAD_SECONDS: what the import actually costs the user in
-#     attention (clicking Upload, watching it finish). Subtracted so the
-#     number we quote is honest net savings, not gross manual time.
 #   - MANUAL_SECONDS_PER_ROOM: each room group needs a header line the user
 #     would otherwise have to type BY HAND — room name in ALL CAPS, wrapped
 #     in ** markers, plus the blank separator lines between groups. Fiddly
 #     and easy to typo, so it carries its own per-room penalty.
+# The post-upload message compares this manual estimate against the *actual*
+# measured import time, so there's no need to fudge an import-overhead figure.
 MANUAL_SECONDS_PER_LINE = 35
 MANUAL_HEADER_OVERHEAD_SECONDS = 45
 MANUAL_SECONDS_PER_ROOM = 25
-IMPORT_OVERHEAD_SECONDS = 10
 
 
 def _count_room_groups(lines) -> int:
@@ -3291,7 +3290,7 @@ class SalesOrderApp:
         button_row = tk.Frame(body, bg=c["bg_window"])
         button_row.pack(fill="x", pady=(12, 0))
 
-        state: dict = {"result": None, "error": None, "client": None}
+        state: dict = {"result": None, "error": None, "client": None, "import_seconds": 0.0}
 
         def append_log(msg: str, tag: str = "") -> None:
             log_text.configure(state="normal")
@@ -3321,6 +3320,9 @@ class SalesOrderApp:
             created = list(getattr(state["client"], "last_created_items", []) or [])
             if created:
                 self._show_created_items_report(state["result"], created)
+            # Offer to clean up the downloaded source file now that the order
+            # is safely in QuickBooks.
+            self._prompt_delete_source_file()
 
         done_btn = ttk.Button(
             button_row,
@@ -3354,7 +3356,9 @@ class SalesOrderApp:
                     lines = upload_kwargs.get("lines") or []
                     num_lines = len(lines)
                     num_rooms = _count_room_groups(lines)
-                    saved_lines = self._time_saved_message_lines(num_lines, num_rooms)
+                    saved_lines = self._time_saved_message_lines(
+                        num_lines, num_rooms, state.get("import_seconds", 0.0)
+                    )
                     if saved_lines:
                         append_log("", tag="muted")
                         for ln in saved_lines:
@@ -3368,6 +3372,7 @@ class SalesOrderApp:
             dlg.bind("<Escape>", lambda e: finish())
 
         def worker() -> None:
+            start = time.monotonic()
             try:
                 client = self._qb_client()
                 state["client"] = client
@@ -3382,6 +3387,7 @@ class SalesOrderApp:
                 log.error("Upload to QuickBooks: failed — %s", exc)
                 log.debug("Upload traceback:\n%s", traceback.format_exc())
             finally:
+                state["import_seconds"] = time.monotonic() - start
                 self.root.after(0, on_complete)
 
         # Center the dialog over the main window.
@@ -3400,36 +3406,39 @@ class SalesOrderApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _time_saved_message_lines(self, num_lines: int, num_rooms: int) -> list[str]:
-        """Build the cheeky 'you just saved …' blurb, addressed to Spencer,
-        for the post-upload Done screen and the Validation Messages panel.
-        Returns an empty list when there's nothing meaningful to brag about.
+    def _time_saved_message_lines(
+        self, num_lines: int, num_rooms: int, import_seconds: float
+    ) -> list[str]:
+        """Build the cheeky time-comparison blurb, addressed to Spencer, for
+        the post-upload Done screen and the Validation Messages panel. Frames
+        it as 'by hand this would have taken X — the import took Y' rather than
+        a single 'saved' figure. Returns [] when there's nothing to brag about.
         """
         if num_lines <= 0:
             return []
         manual = _estimate_manual_seconds(num_lines, num_rooms)
-        saved = manual - IMPORT_OVERHEAD_SECONDS
-        if saved <= 0:
-            return []
+        # Show the real import duration. Clamp to a 1s floor so a sub-second
+        # round-trip doesn't read as "0 seconds".
+        import_secs = max(1, int(round(import_seconds)))
 
         line_word = "line" if num_lines == 1 else "lines"
-        lines = [
-            f"Hey Spencer — you just saved {_format_duration(saved)} with this import.",
-        ]
         if num_rooms > 0:
             room_word = "room" if num_rooms == 1 else "rooms"
-            lines.append(
-                f"Typing those {num_lines} {line_word} into QuickBooks by hand — plus "
-                f"keying {num_rooms} {room_word} in ALL CAPS and wrapping each in ** "
-                f"yourself — would've taken about {_format_duration(manual)}."
+            by_hand = (
+                f"Hey Spencer — entering this order by hand would have taken you about "
+                f"{_format_duration(manual)} ({num_lines} {line_word}, plus {num_rooms} "
+                f"{room_word} typed in ALL CAPS and wrapped in ** yourself)."
             )
         else:
-            lines.append(
-                f"Typing those {num_lines} {line_word} into QuickBooks by hand would've "
-                f"taken about {_format_duration(manual)}."
+            by_hand = (
+                f"Hey Spencer — entering this order by hand would have taken you about "
+                f"{_format_duration(manual)} ({num_lines} {line_word})."
             )
-        lines.append("Still think the small orders aren't worth it? :)")
-        return lines
+        return [
+            by_hand,
+            f"This import took you {_format_duration(import_secs)}.",
+            "Still think the small orders aren't worth it? :)",
+        ]
 
     def _show_time_saved_in_validation(self, saved_lines: list[str]) -> None:
         """Mirror the time-saved blurb into the Validation Messages panel on
@@ -3441,6 +3450,41 @@ class SalesOrderApp:
             self.error_text.insert(tk.END, "\n".join(saved_lines))
         except tk.TclError:
             log.debug("_show_time_saved_in_validation: error_text not available")
+
+    def _prompt_delete_source_file(self) -> None:
+        """After a successful upload, ask whether to delete the downloaded
+        source Excel file (the order from David Meyer) or keep it. Deletes
+        it for the user when they choose to."""
+        src = (self.source_path_var.get() or "").strip()
+        if not src:
+            return
+        src_path = Path(src)
+        if not src_path.exists():
+            return
+        do_delete = messagebox.askyesno(
+            "Delete the downloaded order file?",
+            "This order is now in QuickBooks.\n\n"
+            "Do you want to delete the downloaded Excel file from David Meyer, "
+            "or keep it?\n\n"
+            f"{src_path.name}\n\n"
+            "Yes = delete it for me     No = keep it",
+            icon="question",
+        )
+        if not do_delete:
+            return
+        try:
+            src_path.unlink()
+            log.info("Deleted source file after upload: %s", src_path)
+            self.source_df = None
+            self.source_path_var.set("")
+            self._persist_settings()
+            self._set_status(f"Deleted downloaded order file: {src_path.name}")
+        except Exception as exc:
+            log.exception("Failed to delete source file %s", src_path)
+            messagebox.showerror(
+                "Could Not Delete File",
+                f"Couldn't delete the file:\n\n{src_path}\n\n{exc}",
+            )
 
 
 def _close_pyi_splash() -> None:

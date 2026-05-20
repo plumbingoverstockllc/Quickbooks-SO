@@ -1,6 +1,6 @@
 {
-  "version": "1.042",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.042/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "4f2bcd7a4f6066245bd9de11283beb8d12c79567002ffcc6a5764168ecb59a2c",
+  "version": "1.043",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.043/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "7df0c195b430223c2290044e3c1a6c2a30f2b7873b5503a3197eb05dd738ab8b",
   "notes": "No separate beta build in flight right now. This entry points to the stable release."
 }
