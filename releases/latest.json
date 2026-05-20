@@ -1,6 +1,6 @@
 {
-  "version": "1.043",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.043/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "7df0c195b430223c2290044e3c1a6c2a30f2b7873b5503a3197eb05dd738ab8b",
-  "notes": "Time-saved message now compares the by-hand estimate against the actual measured import time ('this would have taken you X by hand; the import took Y'). After a successful upload the app also asks whether to delete the downloaded order file from David Meyer, and deletes it for you if you say yes."
+  "version": "1.044",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.044/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "44fb9196facb6c9a73301ca54461d17d69c5cb60a8954e47d245b9c8a2dea6fe",
+  "notes": "Updates are optional again (Not Now button is back). When you're several versions behind, the What's New now lists every version's notes between your build and the newest. The app also checks for updates once an hour in the background and prompts when it finds one (it won't re-nag for a version you've already dismissed)."
 }

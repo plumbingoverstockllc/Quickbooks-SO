@@ -36,7 +36,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.043"
+APP_VERSION = "v1.044"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -624,6 +624,9 @@ class SalesOrderApp:
         # Connect manually. The user can opt out by setting
         # "auto_connect_on_startup": false in settings.json.
         self.auto_connect_on_startup = bool(self.settings.get("auto_connect_on_startup", True))
+        # Version the user dismissed with "Not Now"; the hourly auto-check
+        # won't re-prompt for it until a newer version appears.
+        self._snoozed_update_version: str | None = None
         self.pricing_mode = self.settings.get("pricing_mode", "brand")
         self.use_actual_cost = bool(self.settings.get("use_actual_cost", False))
         self.default_pricing_value = float(self.settings.get("default_pricing_value", 0.4))
@@ -1319,6 +1322,64 @@ class SalesOrderApp:
             "notes": str(payload.get("notes", "")).strip(),
         }
 
+    def _collect_cumulative_notes(
+        self, current_tuple: tuple, latest_tuple: tuple, fallback_notes: str
+    ) -> str:
+        """Build a combined 'What's new' covering every stable release newer
+        than the installed build, up to and including the latest. When a user
+        is several versions behind, they see each version's notes — newest
+        first — instead of only the latest one.
+
+        Falls back to `fallback_notes` (the single latest release body) if the
+        releases list can't be fetched.
+        """
+        api_url = (
+            "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases"
+            f"?per_page=100&t={int(datetime.now().timestamp())}"
+        )
+        try:
+            request = urllib.request.Request(
+                api_url,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=10) as resp:
+                releases = json.loads(resp.read().decode("utf-8"))
+
+            entries: list[tuple[tuple, str, str]] = []
+            for rel in releases:
+                if rel.get("prerelease") or rel.get("draft"):
+                    continue
+                tag = str(rel.get("tag_name", "")).strip()
+                ver = tag.lstrip("vV")
+                if not ver:
+                    continue
+                try:
+                    vt = self._version_tuple(ver)
+                except Exception:
+                    continue
+                # Strictly newer than what's installed, up to the latest.
+                if vt <= current_tuple or vt > latest_tuple:
+                    continue
+                body = self._clean_release_notes(str(rel.get("body", "")).strip())
+                entries.append((vt, ver, body))
+
+            if not entries:
+                return fallback_notes
+
+            entries.sort(key=lambda e: e[0], reverse=True)
+            blocks: list[str] = []
+            for _, ver, body in entries:
+                header = f"━━━━━━━━━  v{ver}  ━━━━━━━━━"
+                blocks.append(f"{header}\n{body}" if body else header)
+            return "\n\n".join(blocks)
+        except Exception:
+            log.exception("_collect_cumulative_notes: failed; using single-release notes")
+            return fallback_notes
+
     def _fetch_beta_release_info(self) -> dict:
         """Find the latest beta release.
 
@@ -1445,7 +1506,24 @@ class SalesOrderApp:
                 self._set_status(f"Update check complete: {APP_VERSION} is current.")
                 return
 
+            # On automatic (silent) checks, don't re-nag for a version the
+            # user already dismissed with "Not Now" this session. A manual
+            # check (Help menu) always shows. A genuinely newer version than
+            # the one snoozed will still prompt.
+            if silent and latest_version == getattr(self, "_snoozed_update_version", None):
+                self._set_status(f"Update available ({latest_version}); reminder snoozed.")
+                return
+
+            # When the user is several versions behind, show every version's
+            # notes between what they have and the newest — not just the
+            # latest release body.
+            notes = self._collect_cumulative_notes(current_version, available_version, notes)
+
             if not self._show_update_dialog(latest_version, notes):
+                # Remember the decline so the hourly check doesn't keep
+                # popping the same version.
+                self._snoozed_update_version = latest_version
+                self._set_status(f"Update {latest_version} available — install later from the Help menu.")
                 return
 
             self._download_and_run_update(download_url, sha256_hash)
@@ -1457,6 +1535,25 @@ class SalesOrderApp:
     def check_for_updates_on_startup(self) -> None:
         self._set_status("Checking for updates...")
         self.check_for_updates(silent=True)
+        # Kick off the recurring hourly check.
+        self._schedule_hourly_update_check()
+
+    def _schedule_hourly_update_check(self) -> None:
+        """(Re)arm the once-an-hour background update check."""
+        try:
+            self.root.after(3_600_000, self._hourly_update_check)
+        except tk.TclError:
+            pass
+
+    def _hourly_update_check(self) -> None:
+        """Fires every hour: quietly check for an update and prompt only if a
+        new one (that hasn't already been snoozed) is found, then re-arm."""
+        try:
+            self.check_for_updates(silent=True)
+        except Exception:
+            log.exception("_hourly_update_check failed")
+        finally:
+            self._schedule_hourly_update_check()
 
     def _show_created_items_report(self, upload_message: str, created: list[dict]) -> None:
         """Display a report listing every item the upload had to create in
@@ -1564,12 +1661,9 @@ class SalesOrderApp:
         """Present an Update Available dialog. Returns True if user wants
         to install, False otherwise.
 
-        Stable updates are FORCED: the dialog shows a single OK button and
-        the window can't be dismissed via X or Escape — the user must click
-        OK and the install proceeds. Beta updates stay optional (they're
-        opt-in by definition) and keep the "Not Now" escape hatch.
+        Updates are optional: both stable and beta dialogs offer a "Not Now"
+        escape hatch alongside the install button.
         """
-        force = not is_beta
         c = UI
         dlg = tk.Toplevel(self.root)
         dlg.title("Beta Update Available" if is_beta else "Update Available")
@@ -1595,7 +1689,7 @@ class SalesOrderApp:
         title_text = (
             f"Beta v{latest_version} available"
             if is_beta
-            else f"Update is available — press OK to update"
+            else f"Version {latest_version} is available"
         )
         tk.Label(
             body,
@@ -1672,20 +1766,14 @@ class SalesOrderApp:
             decision["install"] = False
             dlg.destroy()
 
-        if force:
-            # Stable: single OK button, no Not Now, X disabled. The user is
-            # going to update.
-            ttk.Button(
-                button_row, text="OK", command=install, style="Primary.TButton",
-            ).pack(side="right")
-            dlg.protocol("WM_DELETE_WINDOW", lambda: None)
-            dlg.bind("<Return>", lambda e: install())
-        else:
-            ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
-            ttk.Button(
-                button_row, text="Install Beta", command=install, style="Primary.TButton",
-            ).pack(side="right", padx=(0, 10))
-            dlg.protocol("WM_DELETE_WINDOW", cancel)
+        ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
+        install_label = "Install Beta" if is_beta else "Install Update"
+        ttk.Button(
+            button_row, text=install_label, command=install, style="Primary.TButton",
+        ).pack(side="right", padx=(0, 10))
+        dlg.protocol("WM_DELETE_WINDOW", cancel)
+        dlg.bind("<Return>", lambda e: install())
+        dlg.bind("<Escape>", lambda e: cancel())
         dlg.update_idletasks()
         # Center over the main window.
         try:
