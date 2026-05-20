@@ -1,6 +1,6 @@
 {
-  "version": "1.039",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.039/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "f182114f25fa1d5e12916fae9a44c67828c051f87e7760febeb31543d756b318",
-  "notes": "Adds STEP 1 / STEP 2 / STEP 3 / STEP 4 eyebrow labels above each action area so the workflow is self-explanatory for new users. STEP 1 sits over Source File, STEP 2 over the customer + order detail block, STEP 3 over Build Preview / Export, STEP 4 over Upload to QuickBooks."
+  "version": "1.040",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.040/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "4b82a1b4fcb13a40200716fa81f5101d2ad1a21af13a86efa8783e843675990b",
+  "notes": "Fixes pricing rules not showing previously-saved brands. Setup -> Change Pricing Rules now lists every brand/SKU you've ever saved (not just the ones in the currently-loaded file), opens even when no source file or order is entered, and merges edits instead of replacing the list so multipliers from other files are never wiped."
 }

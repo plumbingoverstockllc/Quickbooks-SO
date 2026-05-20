@@ -35,7 +35,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.039"
+APP_VERSION = "v1.040"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -245,15 +245,45 @@ class PricingRulesDialog(tk.Toplevel):
 
         self.value_vars = {}
         mode = self.pricing_mode_var.get()
+        # v1.040: show the UNION of (a) keys present in the currently-loaded
+        # source file and (b) keys already saved from previous sessions.
+        # Previously only the current file's brands/SKUs were listed, so a
+        # user who opened "Change Pricing Rules" with a different file (or no
+        # file) loaded couldn't see — let alone edit — the multipliers they'd
+        # already configured. They're persisted in settings.json the whole
+        # time; they just weren't being displayed.
         if mode == "brand":
-            keys = [(k, k) for k in unique_brands(self.source_df)]
             values_source = self.existing_brand_values
+            file_keys = unique_brands(self.source_df) if self.source_df is not None else []
+            all_keys = sorted(set(file_keys) | set(values_source.keys()))
+            keys = [(k, k) for k in all_keys]
         elif mode == "item":
-            keys = [(k, k) for k in unique_skus(self.source_df)]
             values_source = self.existing_item_values
+            file_keys = unique_skus(self.source_df) if self.source_df is not None else []
+            all_keys = sorted(set(file_keys) | set(values_source.keys()))
+            keys = [(k, k) for k in all_keys]
         else:
-            keys = line_pricing_keys(self.source_df)
+            # Per-line keys are tied to the current file's Excel row numbers,
+            # so they aren't meaningful across files — keep current-file rows
+            # plus any saved line keys so nothing silently vanishes.
             values_source = self.existing_line_values
+            keys = line_pricing_keys(self.source_df) if self.source_df is not None else []
+            seen = {k for k, _ in keys}
+            for saved_key in sorted(values_source.keys()):
+                if saved_key not in seen:
+                    keys.append((saved_key, f"Line {saved_key}"))
+        if not keys:
+            ttk.Label(
+                self.inner,
+                text=(
+                    "No brands to configure yet. Load a source file (Step 1) or "
+                    "saved pricing will appear here once you've set some."
+                ),
+                style="Card.TLabel",
+                wraplength=440,
+                justify="left",
+            ).pack(anchor="w", padx=10, pady=10)
+            return
 
         for key, label in keys:
             row = ttk.Frame(self.inner, style="Card.TFrame")
@@ -2688,8 +2718,18 @@ class SalesOrderApp:
 
     def change_pricing_rules(self):
         try:
-            self._validate_settings()
-            self._ensure_source_loaded()
+            # v1.040: don't hard-require a complete order (_validate_settings)
+            # or a loaded source file. Reviewing/editing saved pricing should
+            # work anytime — this was the bug that hid previously-saved brands
+            # on a machine that didn't have a source file + full order entered.
+            # If a valid source file IS set, load it so the dialog can also
+            # list that file's brands; otherwise just show the saved ones.
+            try:
+                src = self.source_path_var.get().strip()
+                if src and Path(src).exists():
+                    self._ensure_source_loaded()
+            except Exception:
+                log.info("change_pricing_rules: no source file loaded; showing saved pricing only")
             dlg = PricingRulesDialog(
                 self.root,
                 self.source_df,
@@ -2708,12 +2748,17 @@ class SalesOrderApp:
             self.pricing_mode = pricing_mode
             self.use_actual_cost = use_actual_cost
             self.default_pricing_value = default_value
+            # v1.040: merge (update) rather than replace so multipliers for
+            # brands/SKUs that weren't shown this time (e.g. they live in a
+            # different source file) are preserved instead of wiped. The
+            # dialog now lists all saved keys anyway, but merging is the safe
+            # belt-and-suspenders behavior.
             if pricing_mode == "brand":
-                self.brand_values = values
+                self.brand_values.update(values)
             elif pricing_mode == "item":
-                self.item_values = values
+                self.item_values.update(values)
             else:
-                self.line_values = values
+                self.line_values.update(values)
             self._persist_settings()
             mode_text = (
                 "per brand"
