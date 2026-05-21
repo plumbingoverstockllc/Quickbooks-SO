@@ -39,6 +39,11 @@ ROOM_SOURCE_COLUMN_INDEX = 11
 # column I holds the wholesale cost.
 COST_COLUMN = "Cost"
 
+# Per-line note carried internally from the source file's "Notes" column so
+# the QuickBooks upload can write it into the line's NOTES custom field.
+# Like Room/Cost, it's stripped before the SaaSant export.
+NOTES_COLUMN = "LineNotes"
+
 # Deluxe Vanity & Kitchen pricing relationship. Their PO's NET price is what
 # they pay us, which is MSRP * 0.45. Our cost is MSRP * 0.40 (the standard
 # default multiplier). So from the NET on the PO we back out the implied MSRP
@@ -368,6 +373,12 @@ def transform_to_template(
         desc_parts = [brand, sku, product_name]
         combined_desc = " ".join(part for part in desc_parts if part).strip()
 
+        # Per-line note from the source "Notes" column (blank when absent).
+        raw_note = row.get("Notes", "")
+        line_note = "" if (raw_note is None or (isinstance(raw_note, float) and math.isnan(raw_note))) else str(raw_note).strip()
+        if line_note.lower() == "nan":
+            line_note = ""
+
         rows.append(
             {
                 "Sales Order No": settings.sales_order_no,
@@ -391,10 +402,11 @@ def transform_to_template(
                 "Currency": settings.currency,
                 ROOM_COLUMN: room_value,
                 COST_COLUMN: cost_value,
+                NOTES_COLUMN: line_note,
             }
         )
 
-    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS + [ROOM_COLUMN, COST_COLUMN])
+    output_df = pd.DataFrame(rows, columns=TEMPLATE_COLUMNS + [ROOM_COLUMN, COST_COLUMN, NOTES_COLUMN])
     if output_df.empty:
         errors.append("No valid rows were generated.")
     return output_df, errors

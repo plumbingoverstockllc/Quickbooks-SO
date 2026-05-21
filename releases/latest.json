@@ -1,6 +1,6 @@
 {
-  "version": "1.057",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.057/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "2c362f36587ecb58aad2338a1de681cb7d3520eac45020574ff0ac77dc59d1fe",
-  "notes": "Full release: showroom PDF quotes (Deluxe Vanity & Kitchen) can now be imported just like Excel — pick the .pdf in Step 1. Includes everything from recent updates: built-in vendor price database, tiered/variable brand pricing, match wrong brand names to existing ones, delete/combine brands, Send Logs to Support, and fixed buttons in every dialog."
+  "version": "1.058",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.058/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "475ca48cafbfbd2aa7bb50c3483ac3b05dc0505df36446d38088d1b3293e2668",
+  "notes": "Line notes from the source file's Notes column are now written into each sales-order line's NOTES field in QuickBooks. If a line has no note, nothing is added. (Requires a line custom field named NOTES enabled for Sales Orders in QuickBooks.)"
 }

@@ -18,6 +18,11 @@ log = logging.getLogger("qb_so_app.quickbooks")
 
 _QB_PROCESS_NAMES = ("qbw32.exe", "qbw64.exe", "qbw.exe")
 
+# Name of the line-level custom field (data extension) that the source file's
+# per-line notes are written into. Must match the custom field name defined in
+# QuickBooks and enabled for Sales Orders. The on-screen column is "NOTES".
+LINE_NOTE_FIELD = "NOTES"
+
 # Sales order numbers below this are known-historical and never the "next".
 # Used as a FromRefNumber filter so the SalesOrderQuery only paginates the
 # tail of the table instead of the entire history.
@@ -855,6 +860,10 @@ class QuickBooksClient:
                             line_cost = float(line.get("Cost", 0) or 0)
                         except Exception:
                             line_cost = 0.0
+                    line_note = ""
+                    if isinstance(line, dict):
+                        raw_note = line.get("LineNotes", "")
+                        line_note = _clean(raw_note) if raw_note not in (None, "") else ""
                     line_rows.append({
                         "idx": idx,
                         "sku_raw": str(line["Product/Service"] or "").strip(),
@@ -864,6 +873,7 @@ class QuickBooksClient:
                         "rate": float(line["Product/Service Rate"]),
                         "cost": line_cost,
                         "room": str(line.get("Room", "") or "").strip() if isinstance(line, dict) else "",
+                        "note": line_note,
                     })
                 except Exception as exc:
                     raise RuntimeError(
@@ -1032,7 +1042,12 @@ class QuickBooksClient:
                 except Exception:
                     pass
 
+            # emitted_notes runs in lockstep with line_xml: the per-line note
+            # for product lines, None for **ROOM** headers and blank spacers.
+            # After the SO is created we zip this against the returned line
+            # TxnLineIDs to set each line's NOTES custom field via DataExt.
             line_xml: list[str] = []
+            emitted_notes: list[str | None] = []
             if group_by_room:
                 # Walk line_rows in order; whenever the Room value changes
                 # (including to/from blank), close the previous group with two
@@ -1072,14 +1087,16 @@ class QuickBooksClient:
                         label = "**UNNAMED ROOM**"
                     if gi > 0:
                         # Two blank separator lines between groups.
-                        line_xml.append(_blank_line_xml())
-                        line_xml.append(_blank_line_xml())
-                    line_xml.append(_header_line_xml(label))
+                        line_xml.append(_blank_line_xml()); emitted_notes.append(None)
+                        line_xml.append(_blank_line_xml()); emitted_notes.append(None)
+                    line_xml.append(_header_line_xml(label)); emitted_notes.append(None)
                     for row in group_lines:
                         line_xml.append(_product_line_xml(row))
+                        emitted_notes.append(row.get("note") or None)
             else:
                 for row in line_rows:
                     line_xml.append(_product_line_xml(row))
+                    emitted_notes.append(row.get("note") or None)
 
             # QBXML schema requires SalesOrderAdd children in a strict order:
             # CustomerRef, ClassRef, ARAccountRef, TemplateRef, TxnDate,
@@ -1191,6 +1208,74 @@ class QuickBooksClient:
             ref = root.findtext(".//SalesOrderRet/RefNumber", default=sales_order_no)
             txn_id = root.findtext(".//SalesOrderRet/TxnID", default="")
             _progress(f"Sales order #{ref} created in QuickBooks.")
+
+            # Write per-line notes into the line "NOTES" custom field. The
+            # returned SalesOrderLineRet entries are in the same order as the
+            # SalesOrderLineAdd lines we sent, so they line up with
+            # emitted_notes. Best-effort: a failure here (e.g. the custom
+            # field isn't defined) is logged but doesn't fail the upload.
+            if txn_id and any(emitted_notes):
+                try:
+                    ret_line_ids = [
+                        el.text for el in root.findall(".//SalesOrderRet/SalesOrderLineRet/TxnLineID")
+                    ]
+                    pairs = [
+                        (lid, note)
+                        for lid, note in zip(ret_line_ids, emitted_notes)
+                        if note and lid
+                    ]
+                    if pairs:
+                        _progress(f"Adding notes to {len(pairs)} line(s)...")
+                        self._set_line_notes(txn_id, pairs)
+                except Exception:
+                    log.exception("upload_sales_order: failed setting line notes (non-fatal)")
+
             return f"Uploaded Sales Order #{ref} (TxnID: {txn_id})"
         finally:
             self.close()
+
+    def _set_line_notes(self, txn_id: str, line_notes: list) -> None:
+        """Set the per-line 'NOTES' custom field (data extension) on a sales
+        order. `line_notes` is a list of (txn_line_id, note). Done in one
+        DataExtAddRq batch with onError=continueOnError so one bad line
+        doesn't block the rest; per-line statuses are logged."""
+        blocks = []
+        for i, (line_id, note) in enumerate(line_notes, start=1):
+            blocks.append(
+                f"""    <DataExtAddRq requestID="{i}">
+      <DataExtAdd>
+        <OwnerID>0</OwnerID>
+        <DataExtName>{_clean(LINE_NOTE_FIELD)}</DataExtName>
+        <TxnID>{_clean(txn_id)}</TxnID>
+        <TxnLineID>{_clean(line_id)}</TxnLineID>
+        <DataExtValue>{_clean(note)}</DataExtValue>
+      </DataExtAdd>
+    </DataExtAddRq>"""
+            )
+        request_xml = (
+            '<?xml version="1.0"?>\n'
+            '<?qbxml version="13.0"?>\n'
+            '<QBXML>\n'
+            '  <QBXMLMsgsRq onError="continueOnError">\n'
+            + "\n".join(blocks)
+            + "\n  </QBXMLMsgsRq>\n</QBXML>"
+        )
+        response = self._process(request_xml)
+        try:
+            rroot = ET.fromstring(response)
+            ok = sum(1 for rs in rroot.findall(".//DataExtAddRs") if rs.attrib.get("statusCode") == "0")
+            fail = [
+                (rs.attrib.get("statusCode"), rs.attrib.get("statusMessage"))
+                for rs in rroot.findall(".//DataExtAddRs")
+                if rs.attrib.get("statusCode") != "0"
+            ]
+            log.info("_set_line_notes: %d note(s) set, %d failed", ok, len(fail))
+            if fail:
+                # Most common cause: the custom field name doesn't match, or
+                # it isn't enabled for Sales Orders.
+                log.warning(
+                    "_set_line_notes: failures (field=%r): %s",
+                    LINE_NOTE_FIELD, fail[:5],
+                )
+        except ET.ParseError:
+            log.warning("_set_line_notes: could not parse DataExt response")

@@ -22,6 +22,7 @@ from tkinter import filedialog, messagebox, ttk
 from quickbooks_client import QuickBooksClient, _current_process_elevation
 from transformer import (
     COST_COLUMN,
+    NOTES_COLUMN,
     OrderSettings,
     ROOM_COLUMN,
     line_pricing_keys,
@@ -37,7 +38,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.057"
+APP_VERSION = "v1.058"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -3650,7 +3651,7 @@ class SalesOrderApp:
         """
         if self.output_df is None:
             return self.output_df
-        drop_cols = [c for c in (ROOM_COLUMN, COST_COLUMN) if c in self.output_df.columns]
+        drop_cols = [c for c in (ROOM_COLUMN, COST_COLUMN, NOTES_COLUMN) if c in self.output_df.columns]
         return self.output_df.drop(columns=drop_cols) if drop_cols else self.output_df
 
     def _ask_export_path(self, title: str) -> "Path | None":
