@@ -36,7 +36,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.045"
+APP_VERSION = "v1.046b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2611,7 +2611,14 @@ class SalesOrderApp:
                     self.output_df.at[row_idx, key] = value
 
     def _browse_source(self):
-        path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xls *.xlsx")])
+        path = filedialog.askopenfilename(
+            filetypes=[
+                ("Quote files", "*.xls *.xlsx *.pdf"),
+                ("Excel Files", "*.xls *.xlsx"),
+                ("Showroom PDF (Deluxe Vanity)", "*.pdf"),
+                ("All Files", "*.*"),
+            ]
+        )
         if path:
             self.source_path_var.set(path)
             self._persist_settings()

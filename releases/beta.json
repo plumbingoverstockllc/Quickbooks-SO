@@ -1,6 +1,6 @@
 {
-  "version": "1.045",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.045/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "bce900bf5dd3e50090296076c497be510d57e21be8199c0e1de1cbc1cddb94be",
-  "notes": "No separate beta build in flight right now. This entry points to the stable release."
+  "version": "1.046b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.046b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "550a9ed9b1e4fdf95aa3513e9c7b178ec9532354caece19d7b394ad58a0a9a77",
+  "notes": "BETA: reads Deluxe Vanity & Kitchen showroom purchase-order PDFs in addition to David Meyer Excel files. Just pick the .pdf in Step 1 and the line items (part number, brand, description, qty, price) load like a normal quote. NET price is used as the sale rate; since the PO has no MSRP, it's reused as the cost base, so review the brand multiplier in Pricing Rules. Please test before we promote it to stable."
 }
