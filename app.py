@@ -37,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.052b"
+APP_VERSION = "v1.053b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -642,6 +642,10 @@ class SalesOrderApp:
         # number). We keep the raw note so the prompt can show it and the user
         # picks the right tier each time.
         self.vendor_notes: dict[str, str] = self.settings.get("vendor_notes", {})
+        # Brand aliases: source-quote brand name -> the real brand name in the
+        # system. Lets a wrong/abbreviated name on a quote (e.g. "WYC") map to
+        # an existing brand's pricing, remembered for next time.
+        self.brand_aliases: dict[str, str] = self.settings.get("brand_aliases", {})
         # Vendor price database bundled with the app (no manual import needed).
         # vendor_clean: brand -> single multiplier (baseline, always available).
         # Tiered brands' notes are merged into vendor_notes. User-saved values
@@ -2126,6 +2130,7 @@ class SalesOrderApp:
             "item_values": self.item_values,
             "line_values": self.line_values,
             "vendor_notes": self.vendor_notes,
+            "brand_aliases": self.brand_aliases,
         }
         SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -3077,16 +3082,25 @@ class SalesOrderApp:
 
     def _known_brands(self) -> set:
         """Brands we already have a usable multiplier for and so won't prompt:
-        the bundled baseline plus any value the user has saved."""
-        return set(self.vendor_clean) | set(self.brand_values) | set(self.session_brand_values)
+        the bundled baseline, anything the user saved, plus any brand aliased
+        to one of those."""
+        direct = set(self.vendor_clean) | set(self.brand_values) | set(self.session_brand_values)
+        for src, tgt in self.brand_aliases.items():
+            if tgt in direct:
+                direct.add(src)
+        return direct
 
     def _effective_brand_values(self) -> dict:
         """Resolve the multiplier each brand should use for THIS order.
         Precedence: per-order 'variable' values > user-saved overrides >
-        bundled vendor baseline."""
+        bundled vendor baseline. Aliased brands inherit their target's
+        multiplier."""
         merged = dict(self.vendor_clean)
         merged.update(self.brand_values)
         merged.update(self.session_brand_values)
+        for src, tgt in self.brand_aliases.items():
+            if tgt in merged and src not in merged:
+                merged[src] = merged[tgt]
         return merged
 
     def _load_source_file(self, path: str):
@@ -3374,31 +3388,41 @@ class SalesOrderApp:
 
         tk.Label(
             body,
-            text=f"{len(missing_brands)} new brand(s) need pricing",
+            text=f"{len(missing_brands)} brand(s) need pricing",
             bg=c["bg_window"],
             fg=c["accent"],
-            font=("Segoe UI Semibold", 14),
+            font=("Segoe UI Semibold", 11),
             anchor="w",
         ).pack(fill="x")
         if self.use_actual_cost:
-            sub = "Enter the actual cost/rate for each brand."
+            sub = "Enter the actual cost/rate, or match the brand to one already in the system."
         else:
             sub = (
-                "These brands have tiered or per-order pricing, so there's no "
-                "single multiplier. Enter the cost multiplier for this order. "
-                "Leave \"Variable\" checked to be asked again next time, or "
-                "uncheck it to lock this multiplier for the brand from now on."
+                "Enter the cost multiplier, or match the brand to one already in "
+                "the system if it's the same vendor under a different name. Leave "
+                "\"Variable\" checked to be asked each order; uncheck to lock it."
             )
         tk.Label(
             body,
             text=sub,
             bg=c["bg_window"],
             fg=c["text_secondary"],
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 9),
             anchor="w",
             wraplength=640,
             justify="left",
-        ).pack(fill="x", pady=(4, 12))
+        ).pack(fill="x", pady=(3, 10))
+
+        # Sorted list of every brand already known to the app, used as the
+        # "match to existing brand" options.
+        match_options = [""] + sorted(
+            set(self.vendor_clean) | set(self.brand_values) | set(self.vendor_notes)
+        )
+
+        # Buttons are packed at the BOTTOM first, so the scrollable list can
+        # never push them off-screen (the bug where Save wasn't visible).
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom", pady=(10, 0))
 
         wrapper = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
         wrapper.pack(fill="both", expand=True)
@@ -3413,53 +3437,77 @@ class SalesOrderApp:
 
         entry_vars: dict[str, tk.StringVar] = {}
         variable_vars: dict[str, tk.BooleanVar] = {}
+        match_vars: dict[str, tk.StringVar] = {}
         for brand in missing_brands:
             note = self.vendor_notes.get(brand)
             is_tiered = bool(note)
             row = ttk.Frame(inner, style="Card.TFrame")
             row.pack(fill="x", padx=10, pady=6)
 
-            # Left: brand name on top, vendor note wrapped beneath it.
+            # Left column: brand name, vendor note, and a "match to existing
+            # brand" dropdown for when the source used a wrong/alias name.
             left = ttk.Frame(row, style="Card.TFrame")
             left.pack(side="left", fill="x", expand=True)
-            ttk.Label(left, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 10)).pack(anchor="w")
+            ttk.Label(left, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
             if note:
                 ttk.Label(
                     left, text=note, style="Card.TLabel",
-                    foreground=UI["accent"], wraplength=380, justify="left",
+                    foreground=UI["accent"], wraplength=360, justify="left",
+                    font=("Segoe UI", 8),
                 ).pack(anchor="w")
+            match_row = ttk.Frame(left, style="Card.TFrame")
+            match_row.pack(anchor="w", pady=(2, 0))
+            ttk.Label(
+                match_row, text="Match to existing brand:", style="Card.TLabel",
+                font=("Segoe UI", 8),
+            ).pack(side="left", padx=(0, 6))
+            mvar = tk.StringVar(value="")
+            match_vars[brand] = mvar
+            ttk.Combobox(
+                match_row, textvariable=mvar, values=match_options,
+                state="readonly", width=26, font=("Segoe UI", 8),
+            ).pack(side="left")
 
-            # Right: multiplier entry + a "Variable" toggle. Tiered brands
-            # default to Variable (ask each order); brands with no note (just
-            # unknown) default to locked so they stop prompting once entered.
+            # Right: multiplier entry + Variable toggle. Tiered brands default
+            # to Variable (ask each order); unknown brands default to locked.
             var = tk.StringVar(value="")
             entry_vars[brand] = var
-            ttk.Entry(row, textvariable=var, width=8).pack(side="right", padx=(8, 0))
+            ttk.Entry(row, textvariable=var, width=7).pack(side="right", padx=(8, 0))
             vbar = tk.BooleanVar(value=is_tiered)
             variable_vars[brand] = vbar
             ttk.Checkbutton(row, text="Variable", variable=vbar, style="TCheckbutton").pack(side="right")
-
-        button_row = tk.Frame(body, bg=c["bg_window"])
-        button_row.pack(fill="x", pady=(12, 0))
 
         def cancel():
             outcome["cancelled"] = True
             dlg.destroy()
 
         def save():
+            aliases: dict[str, str] = {}
+            parsed: dict[str, float] = {}
             try:
-                parsed = {}
-                for brand, var in entry_vars.items():
-                    text = var.get().strip()
+                for brand in missing_brands:
+                    match = match_vars[brand].get().strip()
+                    if match:
+                        # Mapped to an existing brand — inherit its pricing.
+                        aliases[brand] = match
+                        continue
+                    text = entry_vars[brand].get().strip()
                     if not text:
-                        raise ValueError(f"{brand}: value is empty")
+                        raise ValueError(
+                            f"{brand}: enter a multiplier or pick a brand to match it to."
+                        )
                     parsed[brand] = float(text)
             except ValueError as exc:
                 messagebox.showerror("Invalid Value", str(exc), parent=dlg)
                 return
-            # Variable brands -> per-order only (not saved, asked again next
-            # order). Locked brands -> saved permanently in brand_values.
+            # Aliases: remember the mapping so this name auto-resolves next time.
+            for brand, target in aliases.items():
+                self.brand_aliases[brand] = target
+                self.brand_values.pop(brand, None)
+                self.session_brand_values.pop(brand, None)
+            # Variable -> per-order only; locked -> saved in brand_values.
             for brand, value in parsed.items():
+                self.brand_aliases.pop(brand, None)
                 if variable_vars[brand].get():
                     self.session_brand_values[brand] = value
                     self.brand_values.pop(brand, None)
@@ -3476,6 +3524,8 @@ class SalesOrderApp:
         )
 
         dlg.protocol("WM_DELETE_WINDOW", cancel)
+        dlg.bind("<Return>", lambda e: save())
+        dlg.bind("<Escape>", lambda e: cancel())
         dlg.update_idletasks()
         try:
             self.root.update_idletasks()

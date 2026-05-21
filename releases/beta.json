@@ -1,6 +1,6 @@
 {
-  "version": "1.052b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.052b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "6714e03a66612cf4a90debc723f3ff0cfd6b8ba16c3d1e56ba4dd8997de5ce41",
-  "notes": "BETA: vendor prices are now built into the app — no import needed. The 147 single-multiplier brands apply automatically; the 29 tiered brands (Kohler, Newport Brass, TOTO, etc.) prompt with their vendor note and a 'Variable' toggle — leave it checked to be asked each order, or uncheck to lock the multiplier. Send Logs to Support now emails the log link straight to Moshe (one-time activation click required on the first email). Includes the PDF reader + Deluxe pricing."
+  "version": "1.053b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.053b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "902581fe7007cbecf0eac3f897d2b79b515ed16d8fe0eb4905ac67873bd3d595",
+  "notes": "BETA: fixes the brand-pricing prompt — the Save/Cancel buttons are no longer cut off, and the text is smaller/more compact. Each brand now has a 'Match to existing brand' dropdown, so a wrong or abbreviated name on a quote (like WYC) can be mapped to a brand already in the system; the mapping is remembered for next time. Builds on bundled vendor prices, variable tiers, and emailed support logs."
 }
