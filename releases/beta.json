@@ -1,6 +1,6 @@
 {
-  "version": "1.056b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.056b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "e14755dce1e4aaf6394a301858daca019029ef2ba6cd8fec227118a72385a739",
-  "notes": "BETA: same as stable v1.055 plus the Deluxe Vanity PDF showroom-quote import (still beta-only while it's tested). Everything else — built-in vendor prices, tiered/variable brands, brand matching, delete/combine, Send Logs, dialog button fixes — is now also in stable."
+  "version": "1.057",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.057/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "2c362f36587ecb58aad2338a1de681cb7d3520eac45020574ff0ac77dc59d1fe",
+  "notes": "No separate beta build in flight right now. This entry points to the stable release (PDF import is now fully shipped)."
 }

@@ -6,8 +6,25 @@ REM "Failed to load python314.dll" LoadLibrary error on some Windows 11 machines
 set "PY=C:\Python312\python.exe"
 if not exist "%PY%" set "PY=python"
 
-"%PY%" -m pip install --user -r requirements.txt
-"%PY%" -m pip install --user pyinstaller
+REM Speed: only touch pip when something is actually missing. Repeat release
+REM builds otherwise wasted 30-60s re-checking/re-downloading packages that
+REM were already installed. Pass /full as the first arg to force a refresh.
+if /I "%~1"=="/full" (
+  echo Forcing full dependency reinstall...
+  "%PY%" -m pip install --user -r requirements.txt
+  "%PY%" -m pip install --user pyinstaller
+  "%PY%" -m pip install --user --force-reinstall --no-binary charset-normalizer charset-normalizer
+  goto deps_done
+)
+
+"%PY%" -c "import pandas, openpyxl, xlrd, win32com, pdfplumber, pdfminer, cryptography, cffi, PyInstaller" 2>nul
+if errorlevel 1 (
+  echo Installing missing dependencies...
+  "%PY%" -m pip install --user -r requirements.txt
+  "%PY%" -m pip install --user pyinstaller
+) else (
+  echo Dependencies present - skipping pip.
+)
 
 REM charset-normalizer (pulled in by pdfminer.six) ships a mypyc-compiled
 REM build whose shared runtime is a hash-named module at the site-packages
@@ -15,7 +32,14 @@ REM ROOT (e.g. 81d243...__mypyc.pyd) that PyInstaller's --collect-all can't
 REM associate with the package — so the frozen exe dies with
 REM "No module named '...__mypyc'" and pdfplumber can't import. Force the
 REM PURE-PYTHON build instead; it has no stray extension module to miss.
-"%PY%" -m pip install --user --force-reinstall --no-binary charset-normalizer charset-normalizer
+REM Only reinstall when a compiled .pyd is actually present (otherwise it's
+REM already pure-python and we skip the slow sdist rebuild).
+"%PY%" -c "import charset_normalizer,os,pathlib,sys; d=pathlib.Path(charset_normalizer.__file__).parent; sys.exit(1 if any(f.endswith('.pyd') for f in os.listdir(d)) else 0)" 2>nul
+if errorlevel 1 (
+  echo Reinstalling pure-python charset-normalizer...
+  "%PY%" -m pip install --user --force-reinstall --no-binary charset-normalizer charset-normalizer
+)
+:deps_done
 
 REM --collect-all numpy/pandas avoids "No module named 'numpy._core._exceptions'"
 REM at runtime — numpy 2.x reorganized its internals and the default PyInstaller

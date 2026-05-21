@@ -37,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.056b"
+APP_VERSION = "v1.057"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2886,17 +2886,12 @@ class SalesOrderApp:
                     self.output_df.at[row_idx, key] = value
 
     def _browse_source(self):
-        # PDF showroom-quote import is a beta-only feature for now; stable
-        # builds only offer Excel.
-        if IS_BETA:
-            filetypes = [
-                ("Quote files", "*.xls *.xlsx *.pdf"),
-                ("Excel Files", "*.xls *.xlsx"),
-                ("Showroom PDF (Deluxe Vanity)", "*.pdf"),
-                ("All Files", "*.*"),
-            ]
-        else:
-            filetypes = [("Excel Files", "*.xls *.xlsx")]
+        filetypes = [
+            ("Quote files", "*.xls *.xlsx *.pdf"),
+            ("Excel Files", "*.xls *.xlsx"),
+            ("Showroom PDF (Deluxe Vanity)", "*.pdf"),
+            ("All Files", "*.*"),
+        ]
         path = filedialog.askopenfilename(filetypes=filetypes)
         if path:
             self.source_path_var.set(path)
@@ -3200,13 +3195,7 @@ class SalesOrderApp:
         return merged
 
     def _load_source_file(self, path: str):
-        """Load a source quote, gating PDF import to beta builds only."""
-        if path.lower().endswith(".pdf") and not IS_BETA:
-            raise RuntimeError(
-                "Reading showroom PDF quotes is currently a beta-only feature.\n\n"
-                "Switch to the beta build (Setup → Check for Beta Update) to "
-                "import Deluxe Vanity & Kitchen PDFs."
-            )
+        """Load a source quote (Excel or showroom PDF)."""
         return load_source(path)
 
     def _ensure_source_loaded(self):
