@@ -37,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.051b"
+APP_VERSION = "v1.052b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -46,6 +46,10 @@ IS_BETA = APP_VERSION.strip().lower().endswith("b") or "beta" in APP_VERSION.low
 UPDATE_API_URL = "https://api.github.com/repos/plumbingoverstockllc/Quickbooks-SO/releases/latest"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/latest.json"
 BETA_UPDATE_INFO_URL = "https://raw.githubusercontent.com/plumbingoverstockllc/Quickbooks-SO/main/releases/beta.json"
+# Where "Send Logs to Support" delivers. The log is uploaded to a paste
+# service for a viewable link, and that link is emailed here via FormSubmit
+# (a one-time "Activate Form" click on the first email enables delivery).
+SUPPORT_EMAIL = "mosheyadelman@gmail.com"
 # v1.025b: app was renamed from "QB Sales Order Converter" to "DMQuotes".
 # Settings/log directory keeps the legacy name so existing users' saved
 # configuration (brand multipliers, file paths, window geometry, etc.)
@@ -638,6 +642,17 @@ class SalesOrderApp:
         # number). We keep the raw note so the prompt can show it and the user
         # picks the right tier each time.
         self.vendor_notes: dict[str, str] = self.settings.get("vendor_notes", {})
+        # Vendor price database bundled with the app (no manual import needed).
+        # vendor_clean: brand -> single multiplier (baseline, always available).
+        # Tiered brands' notes are merged into vendor_notes. User-saved values
+        # in brand_values still take precedence over these baselines.
+        self.vendor_clean: dict[str, float] = {}
+        self._load_bundled_vendor_pricing()
+        # Per-order "variable" multipliers entered for tiered brands that the
+        # user chose NOT to lock. Used for the current order only; not saved,
+        # so those brands are asked again on the next order.
+        self.session_brand_values: dict[str, float] = {}
+        self._session_source_path: str | None = None
         self.status_var = tk.StringVar(value="Ready. Load source file, then build preview.")
         self.qb_status_var = tk.StringVar(value="Go to Setup → Connect to QuickBooks Desktop to connect")
         self.qb_status_label: ttk.Label | None = None
@@ -1220,24 +1235,24 @@ class SalesOrderApp:
             messagebox.showerror("Log", f"Could not open folder:\n{LOG_PATH.parent}\n\n{exc}")
 
     def send_logs_to_support(self) -> None:
-        """Upload the current log file to a paste service and hand back a
-        shareable link (also copied to the clipboard) so the user can send it
-        to support for remote diagnosis. No server of our own required.
+        """Upload the current log file to a paste service and email the link
+        straight to support (SUPPORT_EMAIL) via FormSubmit, so issues can be
+        diagnosed remotely. The link is also copied to the clipboard as a
+        backup. No server of our own required.
 
         The log contains file paths, the QuickBooks company name, and recent
-        SKUs/customer names — but no passwords. We tell the user that and make
-        it an explicit, opt-in action.
+        SKUs/customer names — but no passwords. We say so and make it opt-in.
         """
         if not messagebox.askyesno(
             "Send Logs to Support",
-            "This uploads your log file and gives you a private link to send "
-            "to support.\n\n"
+            "This uploads your log file and emails it to support so they can "
+            "look into the problem.\n\n"
             "The log includes file paths, your QuickBooks company name, and "
             "recent activity (SKUs, customers) — but no passwords.\n\n"
-            "Upload now?",
+            "Send now?",
         ):
             return
-        self._set_status("Uploading log to support…")
+        self._set_status("Sending log to support…")
 
         def worker() -> None:
             data = LOG_PATH.read_bytes() if LOG_PATH.exists() else b"(log file empty)"
@@ -1276,36 +1291,88 @@ class SalesOrderApp:
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     return resp.read().decode("utf-8", "replace").strip()
 
+            link = None
             for upload in (via_paste_rs, via_0x0):
                 try:
-                    link = upload()
-                    if link.startswith("http"):
+                    result = upload()
+                    if result.startswith("http"):
+                        link = result
                         log.info("send_logs_to_support: uploaded log -> %s", link)
-                        self.root.after(0, lambda l=link: self._show_log_link(l))
-                        return
-                    errors.append(f"{upload.__name__}: unexpected response {link[:120]!r}")
+                        break
+                    errors.append(f"{upload.__name__}: unexpected response {result[:120]!r}")
                 except Exception as exc:
                     log.exception("send_logs_to_support: %s failed", upload.__name__)
                     errors.append(f"{upload.__name__}: {exc}")
 
-            msg = "; ".join(errors)
-            self.root.after(0, lambda: self._log_upload_failed(msg))
+            if not link:
+                msg = "; ".join(errors)
+                self.root.after(0, lambda: self._log_upload_failed(msg))
+                return
+
+            emailed = self._email_log_link(link)
+            self.root.after(0, lambda l=link, e=emailed: self._show_log_link(l, e))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _show_log_link(self, link: str) -> None:
+    def _email_log_link(self, link: str) -> bool:
+        """Email the uploaded-log link to SUPPORT_EMAIL via FormSubmit's
+        keyless endpoint. Returns True on a successful submission. (The very
+        first email triggers a one-time 'Activate Form' confirmation to the
+        support address; once clicked, all future sends arrive automatically.)
+        """
+        try:
+            payload = json.dumps({
+                "subject": f"{APP_NAME} log — {APP_VERSION}",
+                "message": (
+                    f"A {APP_NAME} user sent their log for support.\n\n"
+                    f"Version: {APP_VERSION}\n"
+                    f"Log link: {link}\n"
+                ),
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"https://formsubmit.co/ajax/{SUPPORT_EMAIL}",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    # FormSubmit's AJAX endpoint requires a web Origin/Referer.
+                    "Origin": "https://dmquotes.shimiralabs.com",
+                    "Referer": "https://dmquotes.shimiralabs.com/",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0 Safari/537.36",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode("utf-8", "replace")
+            log.info("send_logs_to_support: email response %s", body[:200])
+            return '"success":"true"' in body.replace(" ", "")
+        except Exception:
+            log.exception("send_logs_to_support: email step failed")
+            return False
+
+    def _show_log_link(self, link: str, emailed: bool = False) -> None:
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(link)
         except tk.TclError:
             pass
-        self._set_status("Log uploaded. Link copied to clipboard.")
-        messagebox.showinfo(
-            "Logs Sent",
-            "Your log was uploaded. Send this link to support "
-            "(it's already on your clipboard):\n\n"
-            f"{link}",
-        )
+        if emailed:
+            self._set_status("Log sent to support.")
+            messagebox.showinfo(
+                "Logs Sent",
+                "Your log was sent to support. They'll take a look.\n\n"
+                "A copy of the link is on your clipboard if you need it:\n\n"
+                f"{link}",
+            )
+        else:
+            self._set_status("Log uploaded. Link copied to clipboard.")
+            messagebox.showinfo(
+                "Log Uploaded",
+                "Your log was uploaded (the email step didn't go through, but "
+                "that's OK). Send this link to support — it's on your "
+                "clipboard:\n\n"
+                f"{link}",
+            )
 
     def _log_upload_failed(self, error: str) -> None:
         self._set_status("Log upload failed.")
@@ -2985,6 +3052,43 @@ class SalesOrderApp:
         if not Path(self.source_path_var.get()).exists():
             raise FileNotFoundError("Source file path does not exist.")
 
+    def _load_bundled_vendor_pricing(self) -> None:
+        """Load the vendor price database that ships with the app so brand
+        multipliers work out of the box — no manual import required. Single
+        multipliers populate self.vendor_clean; tiered/textual entries are
+        merged into self.vendor_notes (without clobbering user-set notes)."""
+        try:
+            path = _resource_path("vendor_pricing.json")
+            if not path.exists():
+                log.info("_load_bundled_vendor_pricing: no bundled vendor_pricing.json")
+                return
+            data = json.loads(path.read_text(encoding="utf-8"))
+            clean = data.get("clean", {}) or {}
+            tiered = data.get("tiered", {}) or {}
+            self.vendor_clean = {str(k): float(v) for k, v in clean.items()}
+            for brand, note in tiered.items():
+                self.vendor_notes.setdefault(str(brand), str(note))
+            log.info(
+                "_load_bundled_vendor_pricing: loaded %d clean, %d tiered brands",
+                len(self.vendor_clean), len(tiered),
+            )
+        except Exception:
+            log.exception("_load_bundled_vendor_pricing failed")
+
+    def _known_brands(self) -> set:
+        """Brands we already have a usable multiplier for and so won't prompt:
+        the bundled baseline plus any value the user has saved."""
+        return set(self.vendor_clean) | set(self.brand_values) | set(self.session_brand_values)
+
+    def _effective_brand_values(self) -> dict:
+        """Resolve the multiplier each brand should use for THIS order.
+        Precedence: per-order 'variable' values > user-saved overrides >
+        bundled vendor baseline."""
+        merged = dict(self.vendor_clean)
+        merged.update(self.brand_values)
+        merged.update(self.session_brand_values)
+        return merged
+
     def _load_source_file(self, path: str):
         """Load a source quote, gating PDF import to beta builds only."""
         if path.lower().endswith(".pdf") and not IS_BETA:
@@ -3146,7 +3250,9 @@ class SalesOrderApp:
             self.pricing_mode,
             self.use_actual_cost,
             (
-                self.brand_values
+                # In brand mode, fold the bundled vendor baseline + any
+                # per-order "variable" values into the multiplier lookup.
+                self._effective_brand_values()
                 if self.pricing_mode == "brand"
                 else (self.item_values if self.pricing_mode == "item" else self.line_values)
             ),
@@ -3210,20 +3316,24 @@ class SalesOrderApp:
                 )
                 return
             self._validate_settings()
-            self.source_df = self._load_source_file(self.source_path_var.get().strip())
+            source_path = self.source_path_var.get().strip()
+            # A new source file = a new order, so clear any per-order
+            # "variable" multipliers from a previous order.
+            if source_path != self._session_source_path:
+                self.session_brand_values = {}
+                self._session_source_path = source_path
+            self.source_df = self._load_source_file(source_path)
             self.output_overrides = {}
-            if not self.brand_values and not self.item_values and not self.line_values:
-                self.change_pricing_rules()
-                if not self.brand_values and not self.item_values and not self.line_values:
-                    return
 
-            # When pricing by brand, prompt for any brands in the source that
-            # aren't already in the stored brand_values. Falling back to the
-            # default multiplier silently is what produced the "got cost
-            # instead of price" surprise in earlier versions.
+            # When pricing by brand, prompt for any brand we don't yet have a
+            # multiplier for. "Known" includes the bundled vendor database, so
+            # the 147 single-multiplier brands never prompt. Tiered brands
+            # (and anything not in the list) are asked — variable by default,
+            # with the option to lock the cost.
             if self.pricing_mode == "brand":
                 source_brands = unique_brands(self.source_df)
-                missing = [b for b in source_brands if b and b not in self.brand_values]
+                known = self._known_brands()
+                missing = [b for b in source_brands if b and b not in known]
                 if missing:
                     cancelled = self._prompt_missing_brand_multipliers(missing)
                     if cancelled:
@@ -3244,11 +3354,11 @@ class SalesOrderApp:
         """
         c = UI
         dlg = tk.Toplevel(self.root)
-        dlg.title("New Brands Detected")
+        dlg.title("Brand Pricing")
         dlg.configure(bg=c["bg_window"])
-        dlg.geometry("560x520")
+        dlg.geometry("700x560")
         try:
-            dlg.minsize(460, 380)
+            dlg.minsize(560, 420)
         except tk.TclError:
             pass
         dlg.transient(self.root)
@@ -3274,10 +3384,10 @@ class SalesOrderApp:
             sub = "Enter the actual cost/rate for each brand."
         else:
             sub = (
-                "Enter the cost multiplier for each brand. Every vendor is "
-                "different, so there's no default — type the right multiplier. "
-                "Where the vendor list has tiered pricing, the note is shown to "
-                "help you choose."
+                "These brands have tiered or per-order pricing, so there's no "
+                "single multiplier. Enter the cost multiplier for this order. "
+                "Leave \"Variable\" checked to be asked again next time, or "
+                "uncheck it to lock this multiplier for the brand from now on."
             )
         tk.Label(
             body,
@@ -3286,7 +3396,7 @@ class SalesOrderApp:
             fg=c["text_secondary"],
             font=("Segoe UI", 10),
             anchor="w",
-            wraplength=500,
+            wraplength=640,
             justify="left",
         ).pack(fill="x", pady=(4, 12))
 
@@ -3302,28 +3412,32 @@ class SalesOrderApp:
         scroll.pack(side="right", fill="y", pady=8)
 
         entry_vars: dict[str, tk.StringVar] = {}
+        variable_vars: dict[str, tk.BooleanVar] = {}
         for brand in missing_brands:
-            row = ttk.Frame(inner, style="Card.TFrame")
-            row.pack(fill="x", padx=10, pady=4)
-            ttk.Label(row, text=brand, style="Card.TLabel").pack(side="left")
-            # No default pre-fill — the user must enter the right multiplier
-            # for this vendor. Blank value forces an explicit choice.
-            var = tk.StringVar(value="")
-            entry = ttk.Entry(row, textvariable=var, width=10)
-            entry.pack(side="right")
-            entry_vars[brand] = var
-            # If the vendor list had tiered/textual pricing for this brand,
-            # show the note so the user can pick the correct tier.
             note = self.vendor_notes.get(brand)
+            is_tiered = bool(note)
+            row = ttk.Frame(inner, style="Card.TFrame")
+            row.pack(fill="x", padx=10, pady=6)
+
+            # Left: brand name on top, vendor note wrapped beneath it.
+            left = ttk.Frame(row, style="Card.TFrame")
+            left.pack(side="left", fill="x", expand=True)
+            ttk.Label(left, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 10)).pack(anchor="w")
             if note:
                 ttk.Label(
-                    row,
-                    text=note,
-                    style="Card.TLabel",
-                    foreground=UI["accent"],
-                    wraplength=300,
-                    justify="left",
-                ).pack(side="right", padx=(0, 10))
+                    left, text=note, style="Card.TLabel",
+                    foreground=UI["accent"], wraplength=380, justify="left",
+                ).pack(anchor="w")
+
+            # Right: multiplier entry + a "Variable" toggle. Tiered brands
+            # default to Variable (ask each order); brands with no note (just
+            # unknown) default to locked so they stop prompting once entered.
+            var = tk.StringVar(value="")
+            entry_vars[brand] = var
+            ttk.Entry(row, textvariable=var, width=8).pack(side="right", padx=(8, 0))
+            vbar = tk.BooleanVar(value=is_tiered)
+            variable_vars[brand] = vbar
+            ttk.Checkbutton(row, text="Variable", variable=vbar, style="TCheckbutton").pack(side="right")
 
         button_row = tk.Frame(body, bg=c["bg_window"])
         button_row.pack(fill="x", pady=(12, 0))
@@ -3343,7 +3457,15 @@ class SalesOrderApp:
             except ValueError as exc:
                 messagebox.showerror("Invalid Value", str(exc), parent=dlg)
                 return
-            self.brand_values.update(parsed)
+            # Variable brands -> per-order only (not saved, asked again next
+            # order). Locked brands -> saved permanently in brand_values.
+            for brand, value in parsed.items():
+                if variable_vars[brand].get():
+                    self.session_brand_values[brand] = value
+                    self.brand_values.pop(brand, None)
+                else:
+                    self.brand_values[brand] = value
+                    self.session_brand_values.pop(brand, None)
             self._persist_settings()
             outcome["cancelled"] = False
             dlg.destroy()

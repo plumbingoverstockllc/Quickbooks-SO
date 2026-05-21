@@ -37,7 +37,7 @@ REM PyInstaller's bootloader unpacks the bundle to %TEMP%. Without this
 REM there's a 3-5 second window where the user sees nothing and assumes
 REM the launch failed. app.py calls pyi_splash.close() once the main
 REM window is up.
-"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" %COLLECT% --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." app.py
+"%PY%" -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" %COLLECT% --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." --add-data "vendor_pricing.json;." app.py
 
 if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (
   "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer.iss"

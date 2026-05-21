@@ -1,6 +1,6 @@
 {
-  "version": "1.051b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.051b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "3d3b8a3a00e2e902250c63c791f6283f89f2a1737497097c3a1f31a48901f6dd",
-  "notes": "BETA: actually fixes the 'pdfplumber not available' error. Root cause was charset-normalizer's mypyc-compiled build whose shared runtime module wasn't bundled; the build now uses the pure-Python charset-normalizer. Verified pdfplumber imports in the frozen exe. Also adds Log → Send Logs to Support, which uploads your log and gives you a private link to share for remote troubleshooting. Carries the vendor price list multipliers, PDF reader, and Deluxe pricing from earlier betas."
+  "version": "1.052b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.052b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "6714e03a66612cf4a90debc723f3ff0cfd6b8ba16c3d1e56ba4dd8997de5ce41",
+  "notes": "BETA: vendor prices are now built into the app — no import needed. The 147 single-multiplier brands apply automatically; the 29 tiered brands (Kohler, Newport Brass, TOTO, etc.) prompt with their vendor note and a 'Variable' toggle — leave it checked to be asked each order, or uncheck to lock the multiplier. Send Logs to Support now emails the log link straight to Moshe (one-time activation click required on the first email). Includes the PDF reader + Deluxe pricing."
 }
