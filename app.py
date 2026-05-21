@@ -36,7 +36,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.046b"
+APP_VERSION = "v1.047"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1724,6 +1724,28 @@ class SalesOrderApp:
         else:
             tk.Frame(body, bg=c["bg_window"], height=8).pack(fill="x")
 
+        def install():
+            decision["install"] = True
+            dlg.destroy()
+
+        def cancel():
+            decision["install"] = False
+            dlg.destroy()
+
+        # CRITICAL: pack the button row (side=bottom) BEFORE the expanding
+        # notes box. Tk allocates space in pack order, so if the notes box
+        # (expand=True) is packed first it claims the whole cavity and the
+        # buttons get squeezed off the bottom — which is exactly the bug
+        # where "Install / Not Now" weren't visible. Reserving the bottom
+        # first guarantees the buttons always show; the notes fill what's left.
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom", pady=(10, 0))
+        ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
+        install_label = "Install Beta" if is_beta else "Install Update"
+        ttk.Button(
+            button_row, text=install_label, command=install, style="Primary.TButton",
+        ).pack(side="right", padx=(0, 10))
+
         cleaned = self._clean_release_notes(notes)
         if cleaned:
             tk.Label(
@@ -1735,7 +1757,7 @@ class SalesOrderApp:
                 anchor="w",
             ).pack(fill="x")
             text_wrap = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
-            text_wrap.pack(fill="both", expand=True, pady=(4, 12))
+            text_wrap.pack(fill="both", expand=True, pady=(4, 0))
             notes_text = tk.Text(
                 text_wrap,
                 wrap="word",
@@ -1746,7 +1768,8 @@ class SalesOrderApp:
                 relief="flat",
                 padx=12,
                 pady=10,
-                height=10,
+                height=8,
+                width=10,
             )
             sb = ttk.Scrollbar(text_wrap, orient="vertical", command=notes_text.yview)
             notes_text.configure(yscrollcommand=sb.set)
@@ -1755,22 +1778,6 @@ class SalesOrderApp:
             notes_text.pack(side="left", fill="both", expand=True)
             sb.pack(side="right", fill="y")
 
-        button_row = tk.Frame(body, bg=c["bg_window"])
-        button_row.pack(fill="x", side="bottom")
-
-        def install():
-            decision["install"] = True
-            dlg.destroy()
-
-        def cancel():
-            decision["install"] = False
-            dlg.destroy()
-
-        ttk.Button(button_row, text="Not Now", command=cancel, style="Quiet.TButton").pack(side="right")
-        install_label = "Install Beta" if is_beta else "Install Update"
-        ttk.Button(
-            button_row, text=install_label, command=install, style="Primary.TButton",
-        ).pack(side="right", padx=(0, 10))
         dlg.protocol("WM_DELETE_WINDOW", cancel)
         dlg.bind("<Return>", lambda e: install())
         dlg.bind("<Escape>", lambda e: cancel())
@@ -2611,14 +2618,18 @@ class SalesOrderApp:
                     self.output_df.at[row_idx, key] = value
 
     def _browse_source(self):
-        path = filedialog.askopenfilename(
-            filetypes=[
+        # PDF showroom-quote import is a beta-only feature for now; stable
+        # builds only offer Excel.
+        if IS_BETA:
+            filetypes = [
                 ("Quote files", "*.xls *.xlsx *.pdf"),
                 ("Excel Files", "*.xls *.xlsx"),
                 ("Showroom PDF (Deluxe Vanity)", "*.pdf"),
                 ("All Files", "*.*"),
             ]
-        )
+        else:
+            filetypes = [("Excel Files", "*.xls *.xlsx")]
+        path = filedialog.askopenfilename(filetypes=filetypes)
         if path:
             self.source_path_var.set(path)
             self._persist_settings()
@@ -2867,10 +2878,20 @@ class SalesOrderApp:
         if not Path(self.source_path_var.get()).exists():
             raise FileNotFoundError("Source file path does not exist.")
 
+    def _load_source_file(self, path: str):
+        """Load a source quote, gating PDF import to beta builds only."""
+        if path.lower().endswith(".pdf") and not IS_BETA:
+            raise RuntimeError(
+                "Reading showroom PDF quotes is currently a beta-only feature.\n\n"
+                "Switch to the beta build (Setup → Check for Beta Update) to "
+                "import Deluxe Vanity & Kitchen PDFs."
+            )
+        return load_source(path)
+
     def _ensure_source_loaded(self):
         if self.source_df is not None:
             return
-        self.source_df = load_source(self.source_path_var.get().strip())
+        self.source_df = self._load_source_file(self.source_path_var.get().strip())
 
     def change_pricing_rules(self):
         try:
@@ -3015,7 +3036,7 @@ class SalesOrderApp:
                 )
                 return
             self._validate_settings()
-            self.source_df = load_source(self.source_path_var.get().strip())
+            self.source_df = self._load_source_file(self.source_path_var.get().strip())
             self.output_overrides = {}
             if not self.brand_values and not self.item_values and not self.line_values:
                 self.change_pricing_rules()

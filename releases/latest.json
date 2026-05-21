@@ -1,6 +1,6 @@
 {
-  "version": "1.045",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.045/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "bce900bf5dd3e50090296076c497be510d57e21be8199c0e1de1cbc1cddb94be",
-  "notes": "The time-savings estimate now shows in the Validation Messages panel as soon as Build Preview finishes (not only after upload), so you see the payoff before importing. After a successful upload it's replaced with the real import time."
+  "version": "1.047",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.047/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "98c0d38519a5410b302abe36839793f84988734a0eb96eaa02ce113fce6a4f44",
+  "notes": "Fixes the update dialog so the Install / Not Now buttons are always visible (they were getting pushed off the bottom when the release notes were long). Affected both the stable and beta update prompts."
 }
