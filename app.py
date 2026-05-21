@@ -37,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.050b"
+APP_VERSION = "v1.051b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1187,6 +1187,8 @@ class SalesOrderApp:
         log_menu.add_command(label="Open Log File", command=self.open_log_file)
         log_menu.add_command(label="Show Log Folder", command=self.reveal_log_folder)
         log_menu.add_separator()
+        log_menu.add_command(label="Send Logs to Support", command=self.send_logs_to_support)
+        log_menu.add_separator()
         log_menu.add_command(label="Clear Log", command=self.clear_log_file)
         menu_bar.add_cascade(label="Log", menu=log_menu)
 
@@ -1216,6 +1218,104 @@ class SalesOrderApp:
         except Exception as exc:
             log.exception("Failed to open log folder")
             messagebox.showerror("Log", f"Could not open folder:\n{LOG_PATH.parent}\n\n{exc}")
+
+    def send_logs_to_support(self) -> None:
+        """Upload the current log file to a paste service and hand back a
+        shareable link (also copied to the clipboard) so the user can send it
+        to support for remote diagnosis. No server of our own required.
+
+        The log contains file paths, the QuickBooks company name, and recent
+        SKUs/customer names — but no passwords. We tell the user that and make
+        it an explicit, opt-in action.
+        """
+        if not messagebox.askyesno(
+            "Send Logs to Support",
+            "This uploads your log file and gives you a private link to send "
+            "to support.\n\n"
+            "The log includes file paths, your QuickBooks company name, and "
+            "recent activity (SKUs, customers) — but no passwords.\n\n"
+            "Upload now?",
+        ):
+            return
+        self._set_status("Uploading log to support…")
+
+        def worker() -> None:
+            data = LOG_PATH.read_bytes() if LOG_PATH.exists() else b"(log file empty)"
+            ua = f"{APP_NAME}/{APP_VERSION} (support log upload)"
+            errors: list[str] = []
+
+            # Primary: paste.rs — raw POST body, returns the URL as plain text.
+            def via_paste_rs() -> str:
+                req = urllib.request.Request(
+                    "https://paste.rs/",
+                    data=data,
+                    headers={"User-Agent": ua, "Content-Type": "text/plain"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    return resp.read().decode("utf-8", "replace").strip()
+
+            # Fallback: 0x0.st — multipart/form-data.
+            def via_0x0() -> str:
+                boundary = "----DMQuotes" + os.urandom(8).hex()
+                body = (
+                    f"--{boundary}\r\n"
+                    f'Content-Disposition: form-data; name="file"; '
+                    f'filename="{APP_NAME}-{APP_VERSION}.log"\r\n'
+                    f"Content-Type: text/plain\r\n\r\n"
+                ).encode("utf-8") + data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+                req = urllib.request.Request(
+                    "https://0x0.st",
+                    data=body,
+                    headers={
+                        "Content-Type": f"multipart/form-data; boundary={boundary}",
+                        "User-Agent": ua,
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    return resp.read().decode("utf-8", "replace").strip()
+
+            for upload in (via_paste_rs, via_0x0):
+                try:
+                    link = upload()
+                    if link.startswith("http"):
+                        log.info("send_logs_to_support: uploaded log -> %s", link)
+                        self.root.after(0, lambda l=link: self._show_log_link(l))
+                        return
+                    errors.append(f"{upload.__name__}: unexpected response {link[:120]!r}")
+                except Exception as exc:
+                    log.exception("send_logs_to_support: %s failed", upload.__name__)
+                    errors.append(f"{upload.__name__}: {exc}")
+
+            msg = "; ".join(errors)
+            self.root.after(0, lambda: self._log_upload_failed(msg))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_log_link(self, link: str) -> None:
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(link)
+        except tk.TclError:
+            pass
+        self._set_status("Log uploaded. Link copied to clipboard.")
+        messagebox.showinfo(
+            "Logs Sent",
+            "Your log was uploaded. Send this link to support "
+            "(it's already on your clipboard):\n\n"
+            f"{link}",
+        )
+
+    def _log_upload_failed(self, error: str) -> None:
+        self._set_status("Log upload failed.")
+        messagebox.showerror(
+            "Couldn't Send Logs",
+            "The log couldn't be uploaded automatically:\n\n"
+            f"{error}\n\n"
+            "You can still send it manually — use Log → Show Log Folder and "
+            f"email the file to hello@shimiralabs.com.\n\n(File: {LOG_PATH})",
+        )
 
     def clear_log_file(self) -> None:
         if not messagebox.askyesno("Clear Log", "Erase the log file? This cannot be undone."):

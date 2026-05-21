@@ -1,6 +1,6 @@
 {
-  "version": "1.050b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.050b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "72c7fa831482529c4cc1bd7ef49d104423df36934cdb04ebc1fc3c4c8a61fd66",
-  "notes": "BETA: brand multipliers now come from your Vendor Price List. Setup → Import Vendor Price List… reads column F of the first tab: brands with a single multiplier are loaded automatically (147 in the current list); brands with tiered/text pricing (e.g. Kohler '0.57 / 0.50', Newport Brass) are flagged so you're asked to pick the right multiplier when a quote uses them, with the vendor note shown. No more 0.4 default — the prompt starts blank. Also includes the PDF reader fix and Deluxe pricing from 1.049b."
+  "version": "1.051b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.051b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "3d3b8a3a00e2e902250c63c791f6283f89f2a1737497097c3a1f31a48901f6dd",
+  "notes": "BETA: actually fixes the 'pdfplumber not available' error. Root cause was charset-normalizer's mypyc-compiled build whose shared runtime module wasn't bundled; the build now uses the pure-Python charset-normalizer. Verified pdfplumber imports in the frozen exe. Also adds Log → Send Logs to Support, which uploads your log and gives you a private link to share for remote troubleshooting. Carries the vendor price list multipliers, PDF reader, and Deluxe pricing from earlier betas."
 }

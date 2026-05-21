@@ -174,10 +174,19 @@ def load_source_pdf(source_path: str) -> pd.DataFrame:
     """
     try:
         import pdfplumber
-    except ImportError as exc:  # pragma: no cover - bundled in the build
+    except Exception as exc:  # pragma: no cover - bundled in the build
+        # Log the REAL underlying error (e.g. a missing transitive native
+        # dependency) so a support log shows what's actually wrong instead of
+        # just "pdfplumber not available".
+        import logging
+        logging.getLogger("qb_so_app").exception(
+            "load_source_pdf: pdfplumber import failed"
+        )
         raise RuntimeError(
-            "Reading PDF quotes needs the 'pdfplumber' library, which isn't "
-            "available in this build. Reinstall the latest DMQuotes."
+            "Reading PDF quotes failed to load the PDF engine: "
+            f"{type(exc).__name__}: {exc}\n\n"
+            "Reinstall the latest DMQuotes. (Details are in the log — "
+            "Log → Open Log File.)"
         ) from exc
 
     rows: list[dict] = []
