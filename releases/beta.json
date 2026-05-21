@@ -1,6 +1,6 @@
 {
-  "version": "1.054b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.054b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "e0c545b443b6692cc64ef347ae360e754212c9f34486498ee55e3cfba3f57a18",
-  "notes": "BETA: fixed cut-off buttons across all dialogs (Pricing Rules, Row Editor, upload progress, created-items report) — Save/Close are always visible now. Pricing Rules adds a ✕ delete button per brand and a 'Combine Brands…' button to merge one brand into another (e.g. a bogus 'WYC' into the real brand); deletes stick across restarts. Builds on bundled prices, brand matching, variable tiers, and emailed logs."
+  "version": "1.056b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.056b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "e14755dce1e4aaf6394a301858daca019029ef2ba6cd8fec227118a72385a739",
+  "notes": "BETA: same as stable v1.055 plus the Deluxe Vanity PDF showroom-quote import (still beta-only while it's tested). Everything else — built-in vendor prices, tiered/variable brands, brand matching, delete/combine, Send Logs, dialog button fixes — is now also in stable."
 }
