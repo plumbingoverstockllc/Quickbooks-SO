@@ -37,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.053b"
+APP_VERSION = "v1.054b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -215,6 +215,10 @@ class PricingRulesDialog(tk.Toplevel):
         self.existing_brand_values = existing_brand_values or {}
         self.existing_item_values = existing_item_values or {}
         self.existing_line_values = existing_line_values or {}
+        # Keys the user marked for deletion, and combine mappings
+        # (source key -> target key) made in this dialog session.
+        self.deleted: set[str] = set()
+        self.combines: dict[str, str] = {}
 
         self.pricing_mode_var = tk.StringVar(value=pricing_mode)
         self.use_actual_cost_var = tk.BooleanVar(value=use_actual_cost)
@@ -266,6 +270,20 @@ class PricingRulesDialog(tk.Toplevel):
         ttk.Label(self, textvariable=self.default_label_var).pack(anchor="w", padx=18, pady=(0, 4))
         ttk.Entry(self, textvariable=self.default_var).pack(fill="x", padx=18, pady=(0, 14))
 
+        # Buttons FIRST, pinned to the bottom, so the scrolling brand list can
+        # never push them off-screen.
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", side="bottom", padx=18, pady=(0, 16))
+        ttk.Button(buttons, text="Use Pricing Rules", command=self._submit, style="Primary.TButton").pack(
+            side="right"
+        )
+        ttk.Button(buttons, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+        ttk.Button(buttons, text="Combine Brands…", command=self._combine_dialog, style="Quiet.TButton").pack(
+            side="left"
+        )
+
         wrapper = tk.Frame(
             self,
             bg=UI["bg_card"],
@@ -286,18 +304,10 @@ class PricingRulesDialog(tk.Toplevel):
         self.value_vars: dict[str, tk.StringVar] = {}
         self._render_value_rows()
 
-        buttons = ttk.Frame(self)
-        buttons.pack(fill="x", padx=18, pady=(0, 16))
-        ttk.Button(buttons, text="Use Pricing Rules", command=self._submit, style="Primary.TButton").pack(
-            side="right"
-        )
-        ttk.Button(buttons, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
-            side="right", padx=(0, 8)
-        )
-
         self.transient(parent)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<Escape>", lambda e: self._cancel())
 
     def _update_default_label(self) -> None:
         if self.use_actual_cost_var.get():
@@ -351,16 +361,86 @@ class PricingRulesDialog(tk.Toplevel):
             ).pack(anchor="w", padx=10, pady=10)
             return
 
+        self._all_keys = [k for k, _ in keys]
         for key, label in keys:
+            if key in self.deleted or key in self.combines:
+                continue  # hidden: marked for delete or combined away
             row = ttk.Frame(self.inner, style="Card.TFrame")
             row.pack(fill="x", pady=3, padx=10)
-            ttk.Label(row, text=label, width=34, style="Card.TLabel").pack(side="left")
+            ttk.Label(row, text=label, width=30, style="Card.TLabel").pack(side="left")
+            # Delete (✕) removes the brand entirely.
+            ttk.Button(
+                row, text="✕", width=2, style="Quiet.TButton",
+                command=lambda k=key, lbl=label: self._mark_deleted(k, lbl),
+            ).pack(side="right", padx=(6, 0))
             existing_value = ""
             if key in values_source:
                 existing_value = str(values_source.get(key, ""))
             var = tk.StringVar(value=existing_value)
             self.value_vars[key] = var
-            ttk.Entry(row, textvariable=var, width=16).pack(side="right")
+            ttk.Entry(row, textvariable=var, width=14).pack(side="right")
+
+    def _mark_deleted(self, key: str, label: str) -> None:
+        if not messagebox.askyesno(
+            "Delete Brand",
+            f"Delete '{label}' from the pricing list?\n\n"
+            "It won't be priced automatically anymore.",
+            parent=self,
+        ):
+            return
+        self.deleted.add(key)
+        self.value_vars.pop(key, None)
+        self._render_value_rows()
+
+    def _combine_dialog(self) -> None:
+        """Merge one brand into another: the source's quotes will use the
+        target brand's pricing from now on (an alias)."""
+        keys = sorted(getattr(self, "_all_keys", []))
+        if len(keys) < 2:
+            messagebox.showinfo("Combine Brands", "Need at least two brands to combine.", parent=self)
+            return
+        sub = tk.Toplevel(self)
+        sub.title("Combine Brands")
+        sub.configure(bg=UI["bg_window"])
+        sub.geometry("460x220")
+        sub.resizable(False, False)
+        sub.transient(self)
+        sub.grab_set()
+
+        frame = ttk.Frame(sub, padding=(20, 18, 20, 16))
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Combine Brands", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            frame,
+            text="The first brand will be merged into the second and use its pricing.",
+            style="SubHeader.TLabel", wraplength=410, justify="left",
+        ).pack(anchor="w", pady=(2, 12))
+
+        a_var, b_var = tk.StringVar(), tk.StringVar()
+        rowa = ttk.Frame(frame); rowa.pack(fill="x", pady=3)
+        ttk.Label(rowa, text="Merge this brand:", width=18).pack(side="left")
+        ttk.Combobox(rowa, textvariable=a_var, values=keys, state="readonly").pack(side="left", fill="x", expand=True)
+        rowb = ttk.Frame(frame); rowb.pack(fill="x", pady=3)
+        ttk.Label(rowb, text="Into this brand:", width=18).pack(side="left")
+        ttk.Combobox(rowb, textvariable=b_var, values=keys, state="readonly").pack(side="left", fill="x", expand=True)
+
+        def do_combine():
+            a, b = a_var.get().strip(), b_var.get().strip()
+            if not a or not b:
+                messagebox.showerror("Combine Brands", "Pick both brands.", parent=sub)
+                return
+            if a == b:
+                messagebox.showerror("Combine Brands", "Pick two different brands.", parent=sub)
+                return
+            self.combines[a] = b
+            self.value_vars.pop(a, None)
+            sub.destroy()
+            self._render_value_rows()
+
+        btns = ttk.Frame(frame); btns.pack(fill="x", side="bottom", pady=(14, 0))
+        ttk.Button(btns, text="Combine", command=do_combine, style="Primary.TButton").pack(side="right")
+        ttk.Button(btns, text="Cancel", command=sub.destroy, style="Quiet.TButton").pack(side="right", padx=(0, 8))
+        sub.protocol("WM_DELETE_WINDOW", sub.destroy)
 
     def _submit(self) -> None:
         try:
@@ -386,6 +466,8 @@ class PricingRulesDialog(tk.Toplevel):
             self.use_actual_cost_var.get(),
             default_value,
             parsed_values,
+            set(self.deleted),
+            dict(self.combines),
         )
         self.destroy()
 
@@ -418,6 +500,15 @@ class RowEditorDialog(tk.Toplevel):
             ),
             style="SubHeader.TLabel",
         ).pack(anchor="w", pady=(2, 0))
+
+        # Buttons pinned to the bottom first so they're never pushed off by
+        # the expanding tab content.
+        btns = ttk.Frame(self, padding=(20, 12, 20, 16))
+        btns.pack(fill="x", side="bottom")
+        ttk.Button(btns, text="Save Changes", command=self._save, style="Primary.TButton").pack(side="right")
+        ttk.Button(btns, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
 
         wrapper = ttk.Frame(self, padding=(20, 10, 20, 0))
         wrapper.pack(fill="both", expand=True)
@@ -479,13 +570,6 @@ class RowEditorDialog(tk.Toplevel):
             var = tk.StringVar(value="" if value is None else str(value))
             self.source_vars[col] = var
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
-
-        btns = ttk.Frame(self, padding=(20, 12, 20, 16))
-        btns.pack(fill="x")
-        ttk.Button(btns, text="Save Changes", command=self._save, style="Primary.TButton").pack(side="right")
-        ttk.Button(btns, text="Cancel", command=self._cancel, style="Quiet.TButton").pack(
-            side="right", padx=(0, 8)
-        )
 
         self.transient(parent)
         self.grab_set()
@@ -646,6 +730,8 @@ class SalesOrderApp:
         # system. Lets a wrong/abbreviated name on a quote (e.g. "WYC") map to
         # an existing brand's pricing, remembered for next time.
         self.brand_aliases: dict[str, str] = self.settings.get("brand_aliases", {})
+        # Brands the user deleted; suppressed even if present in the bundle.
+        self.deleted_brands: set[str] = set(self.settings.get("deleted_brands", []))
         # Vendor price database bundled with the app (no manual import needed).
         # vendor_clean: brand -> single multiplier (baseline, always available).
         # Tiered brands' notes are merged into vendor_notes. User-saved values
@@ -1775,6 +1861,22 @@ class SalesOrderApp:
             justify="left",
         ).pack(fill="x", pady=(6, 10))
 
+        def copy_to_clipboard() -> None:
+            text = "SKU\tDescription\n" + "\n".join(
+                f"{item.get('sku', '')}\t{item.get('description', '')}" for item in created
+            )
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+
+        # Buttons pinned to the bottom BEFORE the expanding table, so they're
+        # always visible.
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom", pady=(12, 0))
+        ttk.Button(button_row, text="Close", command=dlg.destroy, style="Quiet.TButton").pack(side="right")
+        ttk.Button(button_row, text="Copy as Table", command=copy_to_clipboard, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+
         table_wrap = tk.Frame(body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0)
         table_wrap.pack(fill="both", expand=True)
 
@@ -1790,20 +1892,6 @@ class SalesOrderApp:
         tree.configure(yscrollcommand=sb.set)
         tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-
-        def copy_to_clipboard() -> None:
-            text = "SKU\tDescription\n" + "\n".join(
-                f"{item.get('sku', '')}\t{item.get('description', '')}" for item in created
-            )
-            self.root.clipboard_clear()
-            self.root.clipboard_append(text)
-
-        button_row = tk.Frame(body, bg=c["bg_window"])
-        button_row.pack(fill="x", pady=(12, 0))
-        ttk.Button(button_row, text="Close", command=dlg.destroy, style="Quiet.TButton").pack(side="right")
-        ttk.Button(button_row, text="Copy as Table", command=copy_to_clipboard, style="Quiet.TButton").pack(
-            side="right", padx=(0, 8)
-        )
 
         dlg.update_idletasks()
         try:
@@ -2131,6 +2219,7 @@ class SalesOrderApp:
             "line_values": self.line_values,
             "vendor_notes": self.vendor_notes,
             "brand_aliases": self.brand_aliases,
+            "deleted_brands": sorted(self.deleted_brands),
         }
         SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -3070,8 +3159,15 @@ class SalesOrderApp:
             data = json.loads(path.read_text(encoding="utf-8"))
             clean = data.get("clean", {}) or {}
             tiered = data.get("tiered", {}) or {}
-            self.vendor_clean = {str(k): float(v) for k, v in clean.items()}
+            # Honor brands the user explicitly deleted — don't resurrect them
+            # from the bundle on the next launch.
+            deleted = self.deleted_brands
+            self.vendor_clean = {
+                str(k): float(v) for k, v in clean.items() if str(k) not in deleted
+            }
             for brand, note in tiered.items():
+                if str(brand) in deleted:
+                    continue
                 self.vendor_notes.setdefault(str(brand), str(note))
             log.info(
                 "_load_bundled_vendor_pricing: loaded %d clean, %d tiered brands",
@@ -3213,21 +3309,38 @@ class SalesOrderApp:
             if dlg.result is None:
                 return
 
-            pricing_mode, use_actual_cost, default_value, values = dlg.result
+            pricing_mode, use_actual_cost, default_value, values, deleted, combines = dlg.result
             self.pricing_mode = pricing_mode
             self.use_actual_cost = use_actual_cost
             self.default_pricing_value = default_value
             # v1.040: merge (update) rather than replace so multipliers for
             # brands/SKUs that weren't shown this time (e.g. they live in a
-            # different source file) are preserved instead of wiped. The
-            # dialog now lists all saved keys anyway, but merging is the safe
-            # belt-and-suspenders behavior.
+            # different source file) are preserved instead of wiped.
             if pricing_mode == "brand":
                 self.brand_values.update(values)
+                # Combines: alias source -> target, drop the source's own data.
+                for src, tgt in combines.items():
+                    self.brand_aliases[src] = tgt
+                    self.brand_values.pop(src, None)
+                    self.session_brand_values.pop(src, None)
+                    self.vendor_clean.pop(src, None)
+                # Deletes: remove everywhere and remember so the bundle won't
+                # bring them back next launch.
+                for key in deleted:
+                    self.deleted_brands.add(key)
+                    self.brand_values.pop(key, None)
+                    self.session_brand_values.pop(key, None)
+                    self.vendor_clean.pop(key, None)
+                    self.vendor_notes.pop(key, None)
+                    self.brand_aliases.pop(key, None)
             elif pricing_mode == "item":
                 self.item_values.update(values)
+                for key in deleted:
+                    self.item_values.pop(key, None)
             else:
                 self.line_values.update(values)
+                for key in deleted:
+                    self.line_values.pop(key, None)
             self._persist_settings()
             mode_text = (
                 "per brand"
@@ -3750,6 +3863,14 @@ class SalesOrderApp:
         )
         subheader.pack(fill="x", pady=(2, 12))
 
+        # Pin the button row + progress bar to the bottom BEFORE the
+        # expanding log, so "Done" is always visible.
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom", pady=(12, 0))
+        progress_bar = ttk.Progressbar(body, mode="indeterminate")
+        progress_bar.pack(fill="x", side="bottom", pady=(10, 0))
+        progress_bar.start(12)
+
         log_wrap = tk.Frame(
             body, bg=c["bg_card"],
             highlightbackground=c["border"], highlightthickness=1, bd=0,
@@ -3776,13 +3897,6 @@ class SalesOrderApp:
         log_text.configure(state="disabled")
         log_text.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-
-        progress_bar = ttk.Progressbar(body, mode="indeterminate")
-        progress_bar.pack(fill="x", pady=(10, 0))
-        progress_bar.start(12)
-
-        button_row = tk.Frame(body, bg=c["bg_window"])
-        button_row.pack(fill="x", pady=(12, 0))
 
         state: dict = {"result": None, "error": None, "client": None, "import_seconds": 0.0}
 
