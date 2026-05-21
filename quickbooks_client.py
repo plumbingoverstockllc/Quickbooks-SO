@@ -1234,24 +1234,84 @@ class QuickBooksClient:
         finally:
             self.close()
 
+    def _query_data_ext_defs(self) -> list:
+        """Query QuickBooks for all defined custom fields (data extensions)
+        and return a list of dicts: {name, owner, assign:[...], type}. Logged
+        so we can see the EXACT field name, OwnerID, and what objects each is
+        assigned to — custom fields from add-ons use a GUID OwnerID, not 0."""
+        request_xml = (
+            '<?xml version="1.0"?>\n'
+            '<?qbxml version="13.0"?>\n'
+            '<QBXML><QBXMLMsgsRq onError="continueOnError">\n'
+            '  <DataExtDefQueryRq></DataExtDefQueryRq>\n'
+            '</QBXMLMsgsRq></QBXML>'
+        )
+        defs = []
+        try:
+            resp = self._process(request_xml)
+            rroot = ET.fromstring(resp)
+            for d in rroot.findall(".//DataExtDefRet"):
+                defs.append({
+                    "name": d.findtext("DataExtName", default=""),
+                    "owner": d.findtext("OwnerID", default=""),
+                    "type": d.findtext("DataExtType", default=""),
+                    "assign": [a.text for a in d.findall("AssignToObject")],
+                })
+        except Exception:
+            log.exception("_query_data_ext_defs failed")
+        return defs
+
+    def _resolve_note_field(self):
+        """Find the custom field to use for line notes. Matches the configured
+        LINE_NOTE_FIELD name (case-insensitive) against the actual definitions,
+        falling back to any field whose name contains 'note'. Returns
+        (owner_id, exact_name) or (None, None) if nothing matches."""
+        defs = self._query_data_ext_defs()
+        if defs:
+            log.info(
+                "_resolve_note_field: %d custom field(s) defined: %s",
+                len(defs),
+                [(d["name"], d["owner"], d["assign"]) for d in defs],
+            )
+        target = LINE_NOTE_FIELD.strip().lower()
+        # 1) exact (case-insensitive) name match
+        for d in defs:
+            if d["name"].strip().lower() == target:
+                return d["owner"] or "0", d["name"]
+        # 2) any field whose name contains "note"
+        for d in defs:
+            if "note" in d["name"].strip().lower():
+                return d["owner"] or "0", d["name"]
+        return None, None
+
     def _set_line_notes(self, txn_id: str, line_notes: list) -> None:
-        """Set the per-line 'NOTES' custom field (data extension) on a sales
-        order. `line_notes` is a list of (txn_line_id, note). Done in one
-        DataExtAddRq batch with onError=continueOnError so one bad line
-        doesn't block the rest; per-line statuses are logged."""
+        """Set the per-line notes custom field (data extension) on a sales
+        order. `line_notes` is a list of (txn_line_id, note). Resolves the
+        real field name + OwnerID from QuickBooks first, then writes them in
+        one DataExtAddRq batch (onError=continueOnError). Per-line statuses
+        are logged."""
+        owner, field = self._resolve_note_field()
+        if not field:
+            log.warning(
+                "_set_line_notes: no custom field matching %r found in "
+                "QuickBooks — notes not written. Define a Sales Order line "
+                "custom field for notes, or tell support the exact field name.",
+                LINE_NOTE_FIELD,
+            )
+            return
+        log.info("_set_line_notes: using field=%r owner=%r", field, owner)
+
         blocks = []
         for i, (line_id, note) in enumerate(line_notes, start=1):
             # QBXML DataExtAdd schema for a transaction LINE custom field
             # requires this exact element order:
             #   OwnerID, DataExtName, TxnDataExtType, TxnID, TxnLineID,
             #   DataExtValue
-            # Omitting TxnDataExtType triggers the generic
-            # -2147220480 "error when parsing the provided XML" rejection.
             blocks.append(
                 f"""    <DataExtAddRq requestID="{i}">
       <DataExtAdd>
-        <OwnerID>0</OwnerID>
-        <DataExtName>{_clean(LINE_NOTE_FIELD)}</DataExtName>
+        <OwnerID>{_clean(owner)}</OwnerID>
+        <DataExtName>{_clean(field)}</DataExtName>
         <TxnDataExtType>SalesOrder</TxnDataExtType>
         <TxnID>{_clean(txn_id)}</TxnID>
         <TxnLineID>{_clean(line_id)}</TxnLineID>
@@ -1278,11 +1338,9 @@ class QuickBooksClient:
             ]
             log.info("_set_line_notes: %d note(s) set, %d failed", ok, len(fail))
             if fail:
-                # Most common cause: the custom field name doesn't match, or
-                # it isn't enabled for Sales Orders.
                 log.warning(
-                    "_set_line_notes: failures (field=%r): %s",
-                    LINE_NOTE_FIELD, fail[:5],
+                    "_set_line_notes: failures (field=%r owner=%r): %s",
+                    field, owner, fail[:5],
                 )
         except ET.ParseError:
             log.warning("_set_line_notes: could not parse DataExt response")
