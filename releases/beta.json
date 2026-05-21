@@ -1,6 +1,6 @@
 {
-  "version": "1.048b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.048b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "3889dbef822be8c74417d25029366f2fe576383e12d9b9d089792708300908d6",
-  "notes": "BETA: reads Deluxe Vanity & Kitchen showroom purchase-order PDFs in addition to David Meyer Excel files. Pick the .pdf in Step 1 and the line items load like a normal quote. NET price is used as the sale rate; the PO has no MSRP so NET is reused as the cost base — review the brand multiplier in Pricing Rules. Also includes the v1.047 fix for the update dialog buttons. Please test before promoting to stable."
+  "version": "1.049b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.049b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "f54e92de4fe423e6131868cf86657134452da2c2a0daa70532fb47d56945949c",
+  "notes": "BETA: fixes the 'pdfplumber not available' error when reading Deluxe Vanity PDFs (the cryptography dependency wasn't bundled). Also bakes in Deluxe pricing: the PO's NET price is the sale rate, and our cost is computed as MSRP x 0.40 (NET / 0.45 gives the implied MSRP), so a $729 NET line shows $729 sale and $648 cost. Pick the .pdf in Step 1 and Build Preview."
 }

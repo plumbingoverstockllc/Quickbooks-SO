@@ -39,6 +39,13 @@ ROOM_SOURCE_COLUMN_INDEX = 11
 # column I holds the wholesale cost.
 COST_COLUMN = "Cost"
 
+# Deluxe Vanity & Kitchen pricing relationship. Their PO's NET price is what
+# they pay us, which is MSRP * 0.45. Our cost is MSRP * 0.40 (the standard
+# default multiplier). So from the NET on the PO we back out the implied MSRP
+# (NET / 0.45); the normal cost-side multiplier (0.40) then yields our cost,
+# which works out to ~12.5% below what we charge Deluxe.
+DELUXE_SALE_MULTIPLIER = 0.45
+
 
 @dataclass
 class OrderSettings:
@@ -109,10 +116,11 @@ def load_source_pdf(source_path: str) -> pd.DataFrame:
       - Brand       <- MFG
       - productName <- DESCRIPTION (newlines flattened to spaces)
       - Qty         <- QTY
-      - Price       <- NET   (the per-unit sale rate on the order)
-      - MSRP        <- NET   (no separate MSRP on the PO; reused so the
-                              cost-side multiplier still has a base to work
-                              from — the user can adjust via Pricing Rules)
+      - Price       <- NET            (the per-unit sale rate on the order)
+      - MSRP        <- NET / 0.45     (implied MSRP: Deluxe's NET = MSRP*0.45,
+                                       so dividing recovers the MSRP. The
+                                       standard 0.40 cost multiplier then
+                                       yields our cost, ~12.5% under the NET.)
     """
     try:
         import pdfplumber
@@ -204,10 +212,15 @@ def _parse_pdf_line_item(row: list, col_map: dict) -> dict | None:
     net = _money_to_float(cell("NET"))
     desc = " ".join(cell("DESC").split())  # flatten internal newlines/spaces
 
+    # NET is what Deluxe pays us (= MSRP * 0.45). Recover the implied MSRP so
+    # the cost-side 0.40 multiplier produces our actual cost. NET stays the
+    # sale rate on the order.
+    implied_msrp = round(net / DELUXE_SALE_MULTIPLIER, 2) if net > 0 else 0.0
+
     return {
         "SKU": part,
         "Brand": cell("MFG"),
-        "MSRP": net,
+        "MSRP": implied_msrp,
         "Price": net,
         "Qty": qty,
         "productName": desc,

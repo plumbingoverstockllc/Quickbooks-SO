@@ -12,10 +12,12 @@ if not exist "%PY%" set "PY=python"
 REM --collect-all numpy/pandas avoids "No module named 'numpy._core._exceptions'"
 REM at runtime — numpy 2.x reorganized its internals and the default PyInstaller
 REM hook misses several C-extension submodules.
-REM pdfplumber (+ its pdfminer.six and pdfminer backends) read the Deluxe
-REM Vanity showroom PO PDFs. pdfminer ships CMap data files that the default
-REM hook misses, so --collect-all grabs them.
-set "COLLECT=--collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd --collect-all pdfplumber --collect-all pdfminer"
+REM pdfplumber (+ its pdfminer.six backend) reads the Deluxe Vanity showroom
+REM PO PDFs. pdfminer ships CMap data files the default hook misses, AND it
+REM imports cryptography at load time (which carries a compiled _cffi_backend
+REM and a Rust binding). All four must be collected or `import pdfplumber`
+REM fails at runtime with "pdfplumber not available in this build".
+set "COLLECT=--collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd --collect-all pdfplumber --collect-all pdfminer --collect-all cryptography --collect-all cffi"
 
 REM We only ship the --onefile build (installer.iss sources dist\*.exe).
 REM The earlier --onedir invocation was overwritten by --onefile anyway, so
