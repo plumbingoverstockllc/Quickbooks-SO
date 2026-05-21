@@ -26,6 +26,7 @@ from transformer import (
     ROOM_COLUMN,
     line_pricing_keys,
     load_source,
+    load_vendor_multipliers,
     transform_to_template,
     unique_brands,
     unique_skus,
@@ -36,7 +37,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.049b"
+APP_VERSION = "v1.050b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -633,6 +634,10 @@ class SalesOrderApp:
         self.brand_values: dict[str, float] = self.settings.get("brand_values", {})
         self.item_values: dict[str, float] = self.settings.get("item_values", {})
         self.line_values: dict[str, float] = self.settings.get("line_values", {})
+        # Brands whose vendor-list multiplier is tiered/textual (not a single
+        # number). We keep the raw note so the prompt can show it and the user
+        # picks the right tier each time.
+        self.vendor_notes: dict[str, str] = self.settings.get("vendor_notes", {})
         self.status_var = tk.StringVar(value="Ready. Load source file, then build preview.")
         self.qb_status_var = tk.StringVar(value="Go to Setup → Connect to QuickBooks Desktop to connect")
         self.qb_status_label: ttk.Label | None = None
@@ -1136,6 +1141,7 @@ class SalesOrderApp:
         setup_menu.add_command(label="Connect to QuickBooks Desktop", command=self.connect_quickbooks)
         setup_menu.add_command(label="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide)
         setup_menu.add_separator()
+        setup_menu.add_command(label="Import Vendor Price List…", command=self.import_vendor_price_list)
         setup_menu.add_command(label="Change Pricing Rules", command=self.change_pricing_rules)
         setup_menu.add_command(label="Export Template (Custom Path)", command=self.export_file)
         menu_bar.add_cascade(label="Setup", menu=setup_menu)
@@ -1952,6 +1958,7 @@ class SalesOrderApp:
             "brand_values": self.brand_values,
             "item_values": self.item_values,
             "line_values": self.line_values,
+            "vendor_notes": self.vendor_notes,
         }
         SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -2893,6 +2900,73 @@ class SalesOrderApp:
             return
         self.source_df = self._load_source_file(self.source_path_var.get().strip())
 
+    def import_vendor_price_list(self):
+        """Build the brand→multiplier database from the vendor price list
+        Excel. Column F (Cost Multiplier) drives it: brands with a single
+        clean number are stored as their multiplier; brands with tiered or
+        textual pricing (multiple lines) are recorded as notes so the user is
+        asked to pick the right multiplier when that brand comes up — we never
+        silently guess a default for them."""
+        path = filedialog.askopenfilename(
+            title="Select the Vendor Price List",
+            filetypes=[("Excel Files", "*.xlsx *.xls"), ("All Files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            clean, ambiguous = load_vendor_multipliers(path)
+        except Exception as exc:
+            log.exception("import_vendor_price_list: failed to read %s", path)
+            messagebox.showerror(
+                "Vendor Price List",
+                f"Couldn't read the vendor price list:\n\n{exc}\n\n"
+                "Make sure the first tab has Brand in column A and Cost "
+                "Multiplier in column F.",
+            )
+            return
+
+        if not clean and not ambiguous:
+            messagebox.showwarning(
+                "Vendor Price List",
+                "No brands with multipliers were found on the first tab. "
+                "Check that Brand is in column A and Cost Multiplier in column F.",
+            )
+            return
+
+        # Single-value multipliers become the brand database. Merge so any
+        # multipliers the user typed by hand for brands not in this sheet
+        # survive.
+        self.brand_values.update(clean)
+        # Tiered/textual brands: store the note, and make sure they are NOT in
+        # brand_values so they get prompted (with the note shown) each time.
+        for brand, note in ambiguous.items():
+            self.vendor_notes[brand] = note
+            self.brand_values.pop(brand, None)
+        # From now on pricing is per-brand from the vendor list, so switch the
+        # mode to brand.
+        self.pricing_mode = "brand"
+        self.use_actual_cost = False
+        self._persist_settings()
+
+        log.info(
+            "Imported vendor price list: %d clean, %d tiered/ambiguous from %s",
+            len(clean), len(ambiguous), path,
+        )
+        self._set_status(
+            f"Vendor price list imported: {len(clean)} brand multipliers, "
+            f"{len(ambiguous)} need a choice when used."
+        )
+        sample = ", ".join(sorted(ambiguous)[:8])
+        messagebox.showinfo(
+            "Vendor Price List Imported",
+            f"Loaded {len(clean)} brand multipliers from column F.\n\n"
+            f"{len(ambiguous)} brand(s) have tiered or text pricing (multiple "
+            f"lines in the cell). You'll be asked to enter the multiplier for "
+            f"those when a quote uses them, with the vendor note shown to help "
+            f"you pick.\n\n"
+            + (f"Tiered brands include: {sample}{'…' if len(ambiguous) > 8 else ''}" if ambiguous else ""),
+        )
+
     def change_pricing_rules(self):
         try:
             # v1.040: don't hard-require a complete order (_validate_settings)
@@ -3099,7 +3173,12 @@ class SalesOrderApp:
         if self.use_actual_cost:
             sub = "Enter the actual cost/rate for each brand."
         else:
-            sub = f"Enter the MSRP multiplier for each brand (default {self.default_pricing_value})."
+            sub = (
+                "Enter the cost multiplier for each brand. Every vendor is "
+                "different, so there's no default — type the right multiplier. "
+                "Where the vendor list has tiered pricing, the note is shown to "
+                "help you choose."
+            )
         tk.Label(
             body,
             text=sub,
@@ -3127,10 +3206,24 @@ class SalesOrderApp:
             row = ttk.Frame(inner, style="Card.TFrame")
             row.pack(fill="x", padx=10, pady=4)
             ttk.Label(row, text=brand, style="Card.TLabel").pack(side="left")
-            var = tk.StringVar(value=str(self.default_pricing_value))
+            # No default pre-fill — the user must enter the right multiplier
+            # for this vendor. Blank value forces an explicit choice.
+            var = tk.StringVar(value="")
             entry = ttk.Entry(row, textvariable=var, width=10)
             entry.pack(side="right")
             entry_vars[brand] = var
+            # If the vendor list had tiered/textual pricing for this brand,
+            # show the note so the user can pick the correct tier.
+            note = self.vendor_notes.get(brand)
+            if note:
+                ttk.Label(
+                    row,
+                    text=note,
+                    style="Card.TLabel",
+                    foreground=UI["accent"],
+                    wraplength=300,
+                    justify="left",
+                ).pack(side="right", padx=(0, 10))
 
         button_row = tk.Frame(body, bg=c["bg_window"])
         button_row.pack(fill="x", pady=(12, 0))

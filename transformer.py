@@ -90,6 +90,56 @@ def load_source(source_path: str) -> pd.DataFrame:
     return source_df
 
 
+def load_vendor_multipliers(source_path: str, sheet_name=0) -> tuple[dict, dict]:
+    """Read the vendor price list and split brands into two buckets.
+
+    The 'Vendor Price List for POS' sheet has Brand in column A and the Cost
+    Multiplier in column F. A cell holds either:
+      - a single clean number (e.g. 0.4, .405)  -> goes in `clean`
+      - multi-line / tiered / textual pricing (e.g. "0.3848 China\\n0.45
+        Others", "Net Pricing", "Single Orders = 0.405\\nBulk ...")
+        -> goes in `ambiguous` as a one-line note, because no single
+        multiplier can be auto-applied and the user must choose.
+
+    Returns (clean: {brand: float}, ambiguous: {brand: note}).
+    """
+    df = pd.read_excel(source_path, sheet_name=sheet_name, header=None)
+
+    # Locate the header row + the Brand / Cost Multiplier columns by label so
+    # we don't hard-depend on exact positions (defaults: A=brand, F=mult).
+    brand_col, mult_col, header_row = 0, 5, 0
+    for r in range(min(10, len(df))):
+        row = [str(df.iat[r, c]).strip().lower() if not pd.isna(df.iat[r, c]) else "" for c in range(df.shape[1])]
+        if "brand" in row:
+            header_row = r
+            brand_col = row.index("brand")
+            for c, label in enumerate(row):
+                if "cost multiplier" in label or label == "multiplier":
+                    mult_col = c
+                    break
+            break
+
+    clean: dict[str, float] = {}
+    ambiguous: dict[str, str] = {}
+    for i in range(header_row + 1, len(df)):
+        brand = df.iat[i, brand_col] if brand_col < df.shape[1] else None
+        f = df.iat[i, mult_col] if mult_col < df.shape[1] else None
+        if pd.isna(brand) or not str(brand).strip():
+            continue
+        brand = str(brand).strip()
+        if pd.isna(f) or not str(f).strip():
+            continue  # empty multiplier -> not in DB; will be prompted on demand
+        raw = str(f).strip()
+        if "\n" not in raw:
+            try:
+                clean[brand] = float(raw)
+                continue
+            except ValueError:
+                pass
+        ambiguous[brand] = " | ".join(ln.strip() for ln in raw.splitlines() if ln.strip())
+    return clean, ambiguous
+
+
 def _money_to_float(text: str) -> float:
     """'$729.000' / '1,299.50' -> float. Returns 0.0 on anything unparseable."""
     if text is None:

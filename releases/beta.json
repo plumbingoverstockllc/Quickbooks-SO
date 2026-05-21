@@ -1,6 +1,6 @@
 {
-  "version": "1.049b",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.049b/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "f54e92de4fe423e6131868cf86657134452da2c2a0daa70532fb47d56945949c",
-  "notes": "BETA: fixes the 'pdfplumber not available' error when reading Deluxe Vanity PDFs (the cryptography dependency wasn't bundled). Also bakes in Deluxe pricing: the PO's NET price is the sale rate, and our cost is computed as MSRP x 0.40 (NET / 0.45 gives the implied MSRP), so a $729 NET line shows $729 sale and $648 cost. Pick the .pdf in Step 1 and Build Preview."
+  "version": "1.050b",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.050b/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "72c7fa831482529c4cc1bd7ef49d104423df36934cdb04ebc1fc3c4c8a61fd66",
+  "notes": "BETA: brand multipliers now come from your Vendor Price List. Setup → Import Vendor Price List… reads column F of the first tab: brands with a single multiplier are loaded automatically (147 in the current list); brands with tiered/text pricing (e.g. Kohler '0.57 / 0.50', Newport Brass) are flagged so you're asked to pick the right multiplier when a quote uses them, with the vendor note shown. No more 0.4 default — the prompt starts blank. Also includes the PDF reader fix and Deluxe pricing from 1.049b."
 }
