@@ -36,7 +36,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.044"
+APP_VERSION = "v1.045"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2984,6 +2984,19 @@ class SalesOrderApp:
             self.error_text.insert(tk.END, "No validation errors found.")
             self._set_status(f"Preview ready: {len(self.output_df)} rows.")
 
+        # Show the time-savings estimate in the validation panel as soon as
+        # the preview is ready — appended below any validation messages — so
+        # the payoff is visible before the user even uploads.
+        try:
+            records = self.output_df.to_dict(orient="records")
+            num_lines = len(records)
+            num_rooms = _count_room_groups(records)
+            est_lines = self._time_saved_message_lines(num_lines, num_rooms, None)
+            if est_lines:
+                self.error_text.insert(tk.END, "\n\n" + "\n".join(est_lines))
+        except Exception:
+            log.exception("post-preview time-saved estimate failed; skipping")
+
     def build_preview(self):
         try:
             missing = self._validate_required_fields()
@@ -3495,35 +3508,47 @@ class SalesOrderApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def _time_saved_message_lines(
-        self, num_lines: int, num_rooms: int, import_seconds: float
+        self, num_lines: int, num_rooms: int, import_seconds: float | None = None
     ) -> list[str]:
-        """Build the cheeky time-comparison blurb, addressed to Spencer, for
-        the post-upload Done screen and the Validation Messages panel. Frames
-        it as 'by hand this would have taken X — the import took Y' rather than
-        a single 'saved' figure. Returns [] when there's nothing to brag about.
+        """Build the cheeky time-comparison blurb, addressed to Spencer.
+
+        Used in two places:
+          - After Build Preview (import_seconds=None): an *estimate* — "by
+            hand this would take about X; importing it takes seconds."
+          - After a successful upload (import_seconds set): the real number —
+            "by hand this would have taken X; the import took Y."
+
+        Returns [] when there's nothing meaningful to show.
         """
         if num_lines <= 0:
             return []
         manual = _estimate_manual_seconds(num_lines, num_rooms)
-        # Show the real import duration. Clamp to a 1s floor so a sub-second
-        # round-trip doesn't read as "0 seconds".
-        import_secs = max(1, int(round(import_seconds)))
 
         line_word = "line" if num_lines == 1 else "lines"
         if num_rooms > 0:
             room_word = "room" if num_rooms == 1 else "rooms"
-            by_hand = (
-                f"Hey Spencer — entering this order by hand would have taken you about "
-                f"{_format_duration(manual)} ({num_lines} {line_word}, plus {num_rooms} "
-                f"{room_word} typed in ALL CAPS and wrapped in ** yourself)."
+            detail = (
+                f"({num_lines} {line_word}, plus {num_rooms} {room_word} typed in "
+                f"ALL CAPS and wrapped in ** yourself)"
             )
         else:
-            by_hand = (
-                f"Hey Spencer — entering this order by hand would have taken you about "
-                f"{_format_duration(manual)} ({num_lines} {line_word})."
-            )
+            detail = f"({num_lines} {line_word})"
+
+        if import_seconds is None:
+            # Estimate-only (post-preview): use future tense, no real timing.
+            return [
+                f"Hey Spencer — entering this order into QuickBooks by hand would take "
+                f"you about {_format_duration(manual)} {detail}.",
+                "This import will take you seconds.",
+                "Still think the small orders aren't worth it? :)",
+            ]
+
+        # Clamp the real duration to a 1s floor so a sub-second round-trip
+        # doesn't read as "0 seconds".
+        import_secs = max(1, int(round(import_seconds)))
         return [
-            by_hand,
+            f"Hey Spencer — entering this order by hand would have taken you about "
+            f"{_format_duration(manual)} {detail}.",
             f"This import took you {_format_duration(import_secs)}.",
             "Still think the small orders aren't worth it? :)",
         ]
