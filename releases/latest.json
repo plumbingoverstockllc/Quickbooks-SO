@@ -1,6 +1,6 @@
 {
-  "version": "1.047",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.047/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "98c0d38519a5410b302abe36839793f84988734a0eb96eaa02ce113fce6a4f44",
-  "notes": "Fixes the update dialog so the Install / Not Now buttons are always visible (they were getting pushed off the bottom when the release notes were long). Affected both the stable and beta update prompts."
+  "version": "1.055",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.055/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "03b74347be341761b6bf2c51015b036d54e6194d6a6ca147c472ad9a196edc95",
+  "notes": "Vendor prices are now built in — brand multipliers apply automatically (147 brands), with tiered brands (Kohler, Newport Brass, TOTO, etc.) prompting per order with their note and a Variable toggle. New brands can be matched to an existing brand if the quote used a wrong name. Setup → Change Pricing Rules can delete or combine brands. Log → Send Logs to Support uploads your log and emails it to support. Fixed cut-off buttons in every dialog. (PDF showroom-quote import remains a beta-only feature for now.)"
 }
