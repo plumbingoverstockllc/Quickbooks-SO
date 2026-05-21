@@ -1,6 +1,6 @@
 {
-  "version": "1.058",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.058/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "475ca48cafbfbd2aa7bb50c3483ac3b05dc0505df36446d38088d1b3293e2668",
-  "notes": "Line notes from the source file's Notes column are now written into each sales-order line's NOTES field in QuickBooks. If a line has no note, nothing is added. (Requires a line custom field named NOTES enabled for Sales Orders in QuickBooks.)"
+  "version": "1.059",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.059/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "61459b0382e75a741c3062accc6c6192499b0c0a6921b282b3a89f9f2b888aa5",
+  "notes": "Fixes line notes not importing — the QuickBooks request was missing a required element. Notes from the source file's Notes column now write into each sales-order line's NOTES field. (Requires a line custom field named NOTES enabled for Sales Orders.)"
 }

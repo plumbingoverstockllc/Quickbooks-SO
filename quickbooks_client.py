@@ -1241,11 +1241,18 @@ class QuickBooksClient:
         doesn't block the rest; per-line statuses are logged."""
         blocks = []
         for i, (line_id, note) in enumerate(line_notes, start=1):
+            # QBXML DataExtAdd schema for a transaction LINE custom field
+            # requires this exact element order:
+            #   OwnerID, DataExtName, TxnDataExtType, TxnID, TxnLineID,
+            #   DataExtValue
+            # Omitting TxnDataExtType triggers the generic
+            # -2147220480 "error when parsing the provided XML" rejection.
             blocks.append(
                 f"""    <DataExtAddRq requestID="{i}">
       <DataExtAdd>
         <OwnerID>0</OwnerID>
         <DataExtName>{_clean(LINE_NOTE_FIELD)}</DataExtName>
+        <TxnDataExtType>SalesOrder</TxnDataExtType>
         <TxnID>{_clean(txn_id)}</TxnID>
         <TxnLineID>{_clean(line_id)}</TxnLineID>
         <DataExtValue>{_clean(note)}</DataExtValue>
