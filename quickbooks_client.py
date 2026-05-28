@@ -835,12 +835,9 @@ class QuickBooksClient:
         _progress("Connecting to QuickBooks...")
         self.connect()
         try:
-            # Make sure the customer has a default sales-tax item so the
-            # SalesOrderAdd doesn't trip QB error 3180 ("Transaction Sales
-            # Tax field cannot be left blank"). QBXML 13.0 doesn't allow an
-            # ItemSalesTaxRef directly on SalesOrderAdd, so we set it on the
-            # customer instead. Best-effort -- logged failures don't block
-            # the upload attempt.
+            # Best-effort: set the customer's default ItemSalesTaxRef when
+            # missing (helps manual SO entry). SalesOrderAdd also sends
+            # ItemSalesTaxRef on the transaction (required for CA / 3180).
             if sales_tax_item:
                 _progress(f"Verifying sales-tax setup for {customer_name}...")
                 self._ensure_customer_tax_item(customer_name, sales_tax_item)
@@ -1098,14 +1095,11 @@ class QuickBooksClient:
                     line_xml.append(_product_line_xml(row))
                     emitted_notes.append(row.get("note") or None)
 
-            # QBXML schema requires SalesOrderAdd children in a strict order:
-            # CustomerRef, ClassRef, ARAccountRef, TemplateRef, TxnDate,
-            # RefNumber, BillAddress, ShipAddress, PONumber, TermsRef, DueDate,
-            # SalesRep, FOB, ShipDate, ShipMethodRef, IsManuallyClosed, Memo,
-            # ..., SalesOrderLineAdd. Out-of-order children cause QB to return
-            # -2147220480 "QuickBooks found an error when parsing the provided
-            # XML text stream." Build the optional ones conditionally so empty
-            # fields don't ship as empty elements (also a schema risk).
+            # QBXML schema requires SalesOrderAdd children in a strict order.
+            # Relevant slice: ... ShipMethodRef, ItemSalesTaxRef, Memo,
+            # CustomerSalesTaxCodeRef, ..., SalesOrderLineAdd. Out-of-order
+            # children cause QB to return -2147220480 "parsing error".
+            # ItemSalesTaxRef is the transaction-level tax item (fixes 3180).
             txn_date_iso = _to_qb_date(txn_date)
             due_date_iso = _to_qb_date(due_date)
             log.debug(
@@ -1131,22 +1125,19 @@ class QuickBooksClient:
                 parts.append(f"<DueDate>{due_date_iso}</DueDate>")
             if shipping_method:
                 parts.append(f"<ShipMethodRef><FullName>{_clean(shipping_method)}</FullName></ShipMethodRef>")
+            tax_item_clean = _clean(sales_tax_item)
+            if tax_item_clean:
+                parts.append(
+                    f"<ItemSalesTaxRef><FullName>{tax_item_clean}</FullName></ItemSalesTaxRef>"
+                )
             if memo:
                 parts.append(f"<Memo>{_clean(memo)}</Memo>")
-            # CustomerSalesTaxCodeRef sets the header-level "Tax" code on the
-            # sales order so QuickBooks doesn't default it to None. The line-
-            # level SalesTaxCodeRef on each SalesOrderLineAdd marks the line
-            # as taxable; without the header code, QB still treats the order
-            # as non-taxable and the user has to flip it manually.
+            # CustomerSalesTaxCodeRef sets the header-level tax code (e.g. TAX).
+            # Line-level SalesTaxCodeRef marks each product line taxable.
             if tax_code:
                 parts.append(
                     f"<CustomerSalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></CustomerSalesTaxCodeRef>"
                 )
-            # Note: ItemSalesTaxRef is NOT a valid child of SalesOrderAdd in
-            # QBXML 13.0 -- emitting it here triggers a parse error
-            # (-2147220480). The header tax rate is instead inherited from
-            # the customer's default tax item, which we ensure is set via
-            # _ensure_customer_tax_item() above before this XML is built.
             parts.append("".join(line_xml))
 
             # Intentionally NO encoding="..." on the XML declaration.

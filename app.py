@@ -38,7 +38,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.060"
+APP_VERSION = "v1.061"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -707,7 +707,9 @@ class SalesOrderApp:
         self.qb_company_file_var = tk.StringVar(value=self.settings.get("qb_company_file_path", ""))
         self.fallback_item_var = tk.StringVar(value=self.settings.get("fallback_item", ""))
         self.income_account_var = tk.StringVar(value=self.settings.get("income_account", "Sales Non Inventory"))
-        self.sales_tax_item_var = tk.StringVar(value=self.settings.get("sales_tax_item", ""))
+        self.sales_tax_item_var = tk.StringVar(
+            value=self.settings.get("sales_tax_item", "CA Tax")
+        )
         self.room_grouping_var = tk.BooleanVar(value=bool(self.settings.get("room_grouping_enabled", False)))
         # Default ON: auto-connect on every launch. If the attach fails the
         # status pill just shows "Not Connected" and the user can click
@@ -2403,6 +2405,7 @@ class SalesOrderApp:
         self._form_entry(form, "Currency", self.currency_var, 7, 6, 2, min_chars=6)
         self._form_entry(form, "Tax Code", self.tax_code_var, 7, 8, 2, min_chars=6)
         self._form_entry(form, "Default Income Account", self.income_account_var, 7, 10, 6, min_chars=18)
+        self._form_entry(form, "Sales Tax Item", self.sales_tax_item_var, 8, 0, 6, min_chars=12)
 
         # Bottom bar of the Configuration card — now just the QB status pill,
         # since Connect/Admin Setup/Update commands moved to the Setup and
@@ -3788,7 +3791,7 @@ class SalesOrderApp:
             memo=self.memo_var.get().strip(),
             lines=self.output_df.to_dict(orient="records"),
             tax_code=self.tax_code_var.get().strip() or "TAX",
-            sales_tax_item="CA Tax",
+            sales_tax_item=self.sales_tax_item_var.get().strip() or "CA Tax",
             fallback_item=self.fallback_item_var.get().strip(),
             income_account=self.income_account_var.get().strip(),
             expense_account="COGS Non Inventory",

@@ -1,6 +1,6 @@
 {
-  "version": "1.060",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.060/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "56d4e23655b294417adf567d72e2307d3b3430695f7f8914fbfb1a36be30abe4",
-  "notes": "Line notes now auto-detect the correct QuickBooks custom field (any owner / a field named like 'Notes') instead of assuming a fixed name, and the available custom fields are logged for troubleshooting."
+  "version": "1.061",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.061/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "",
+  "notes": "Sales order uploads now include the transaction sales tax item (ItemSalesTaxRef) on each SalesOrderAdd, fixing QuickBooks error 3180 when the header tax field was blank. Configure the Sales Tax Item in Configuration (default CA Tax)."
 }
