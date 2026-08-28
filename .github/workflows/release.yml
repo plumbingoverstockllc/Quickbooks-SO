@@ -88,12 +88,13 @@ jobs:
             gh release create $tag $asset --title "DMQuotes v$ver (beta)" --notes $body --prerelease
             $feedPath = "releases/beta.json"
           } else {
-            $summary = "Setup clears inherited PyInstaller environment variables so the post-update relaunch no longer hits the bootloader security check."
+            $summary = "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once; dialogs say Estimate when you are building an estimate."
             $body = @(
               "v$ver for every installed copy of DMQuotes.",
               "",
-              "- Setup now clears the PyInstaller variables it inherits from the running app, so the relaunch after an update no longer fails with ""Security validation failure: parent process has different executable!""",
-              "- This makes upgrades work from any older build, including ones whose own updater does not clean up after itself",
+              "- An upload whose customer is not in the QuickBooks Customer list now stops with ""Customer not in system, please add it first"" instead of creating the customer. A typo can no longer leave a near-duplicate customer record behind.",
+              "- Vendor pickers list each QuickBooks vendor once, under its list name. The vendor's Company Name is no longer offered as a second, near-identical choice.",
+              "- The upload window, the row editor and the missing-field warning now say Estimate when the document type is Estimate, instead of always saying SO / Sales Order.",
               "",
               "SHA256: $sha"
             ) -join "`n"
