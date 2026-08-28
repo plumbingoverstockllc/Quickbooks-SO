@@ -1264,15 +1264,19 @@ class QuickBooksClient:
                     line_xml.append(_product_line_xml(row))
                     emitted_notes.append(row.get("note") or None)
 
-            # QBXML schema requires SalesOrderAdd children in a strict order.
-            # Relevant slice: ... ShipMethodRef, ItemSalesTaxRef, Memo,
-            # CustomerSalesTaxCodeRef, ..., SalesOrderLineAdd. Out-of-order
-            # children cause QB to return -2147220480 "parsing error".
+            # QBXML schema requires Add children in a strict order.
+            # SalesOrderAdd: ... ShipMethodRef, ItemSalesTaxRef, Memo,
+            # CustomerSalesTaxCodeRef, ..., SalesOrderLineAdd.
+            # EstimateAdd has NO ShipMethodRef (DueDate → SalesRepRef/FOB →
+            # ItemSalesTaxRef → Memo → CustomerSalesTaxCodeRef → lines).
+            # Sending ShipMethodRef on EstimateAdd causes -2147220480
+            # "parsing error". Out-of-order children fail the same way.
             # ItemSalesTaxRef is the transaction-level tax item (fixes 3180).
             txn_date_iso = _to_qb_date(txn_date)
             due_date_iso = _to_qb_date(due_date)
             log.debug(
-                "upload_sales_order: customer=%r so=%r txn=%s due=%s terms=%r ship=%r tax=%r lines=%d",
+                "upload_sales_order: type=%s customer=%r so=%r txn=%s due=%s terms=%r ship=%r tax=%r lines=%d",
+                txn_noun,
                 customer_name,
                 sales_order_no,
                 txn_date_iso,
@@ -1292,8 +1296,14 @@ class QuickBooksClient:
                 parts.append(f"<TermsRef><FullName>{_clean(terms)}</FullName></TermsRef>")
             if due_date_iso:
                 parts.append(f"<DueDate>{due_date_iso}</DueDate>")
-            if shipping_method:
+            # ShipMethodRef is SalesOrder-only (not in EstimateAdd schema).
+            if shipping_method and not is_estimate:
                 parts.append(f"<ShipMethodRef><FullName>{_clean(shipping_method)}</FullName></ShipMethodRef>")
+            elif shipping_method and is_estimate:
+                log.info(
+                    "upload_sales_order: omitting ShipMethodRef=%r on estimate (unsupported by EstimateAdd)",
+                    shipping_method,
+                )
             tax_item_clean = _clean(sales_tax_item)
             if tax_item_clean:
                 parts.append(

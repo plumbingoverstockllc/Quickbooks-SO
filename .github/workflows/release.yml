@@ -70,10 +70,8 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Fix silent update helper that exited without running Setup (invalid DETACHED_PROCESS + CREATE_NO_WINDOW flags)
-          - PowerShell update applicator logs every command, PID, and Setup exit code
-          - Inno Setup /LOG is appended into app.log and update.log (every file replaced during install)
-          - Relaunch only after Setup exit code 0
+          - Fix Estimate upload XML parse error (omit ShipMethodRef — not valid on EstimateAdd)
+          - Type-to-search on Match to existing brand / Match Vendor Names comboboxes (large QB vendor lists)
 
           SHA256: $sha
           "@
@@ -82,7 +80,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Fix update helper so Setup actually runs; log every update command and every file Inno replaces into app.log/update.log."
+            notes = "Fix Estimate upload (no ShipMethodRef on EstimateAdd); type-to-search brand/vendor match dropdowns."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force

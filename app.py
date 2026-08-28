@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.066"
+APP_VERSION = "v1.067"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -3407,6 +3407,51 @@ Write-UpdateLog 'helper done'
                 names.add(src)
         return sorted(n for n in names if n)
 
+    def _wire_searchable_combobox(self, combo: ttk.Combobox, all_values: list[str]) -> None:
+        """Let the user type to filter a long Combobox (1000+ QB vendors).
+
+        ``readonly`` forces scrolling the entire list. ``normal`` + KeyRelease
+        filtering keeps the dropdown usable when matching Phylrich → Deluxe, etc.
+        """
+        full = [""] + [v for v in all_values if v]
+        # Deduplicate while preserving order ("" first).
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for value in full:
+            if value in seen:
+                continue
+            seen.add(value)
+            ordered.append(value)
+        full = ordered
+        combo.configure(values=full, state="normal")
+
+        def on_key(event: tk.Event) -> None:
+            if event.keysym in (
+                "Return", "Escape", "Tab", "Up", "Down", "Left", "Right",
+                "Home", "End", "Prior", "Next", "Shift_L", "Shift_R",
+                "Control_L", "Control_R", "Alt_L", "Alt_R",
+            ):
+                return
+            typed = combo.get()
+            needle = typed.strip().lower()
+            if not needle:
+                filtered = full
+            else:
+                filtered = [v for v in full if v and needle in v.lower()]
+                if not filtered:
+                    filtered = [typed] if typed else [""]
+            combo.configure(values=filtered)
+
+        def on_focus_out(_event: tk.Event | None = None) -> None:
+            # Restore the full list so the next open isn't stuck on a filter.
+            try:
+                combo.configure(values=full)
+            except tk.TclError:
+                pass
+
+        combo.bind("<KeyRelease>", on_key)
+        combo.bind("<FocusOut>", on_focus_out)
+
     def _unmatched_source_brands(self) -> list[str]:
         if self.source_df is None or self.source_df.empty:
             return []
@@ -3482,7 +3527,7 @@ Write-UpdateLog 'helper done'
             text=(
                 "This does not change multipliers. It only remembers that a name "
                 "on a quote is the same vendor as one you already have — including "
-                "vendors pulled from QuickBooks."
+                "vendors pulled from QuickBooks. Type in a dropdown to search."
             ),
             bg=c["bg_window"],
             fg=c["text_secondary"],
@@ -3517,8 +3562,9 @@ Write-UpdateLog 'helper done'
             row = ttk.Frame(inner, style="Card.TFrame")
             row.pack(fill="x", padx=10, pady=6)
             ttk.Label(row, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
-            combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
+            combo = ttk.Combobox(row, textvariable=var, values=match_options, width=48)
             combo.pack(fill="x", pady=(2, 0))
+            self._wire_searchable_combobox(combo, match_options)
             match_combos.append(combo)
 
         line_vars: dict[int, tk.StringVar] = {}
@@ -3533,15 +3579,16 @@ Write-UpdateLog 'helper done'
                 style="Card.TLabel",
                 font=("Segoe UI Semibold", 9),
             ).pack(anchor="w")
-            combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
+            combo = ttk.Combobox(row, textvariable=var, values=match_options, width=48)
             combo.pack(fill="x", pady=(2, 0))
+            self._wire_searchable_combobox(combo, match_options)
             match_combos.append(combo)
 
         def refresh_match_options() -> None:
             options = [""] + self._all_known_vendor_names()
             for combo in match_combos:
                 try:
-                    combo.configure(values=options)
+                    self._wire_searchable_combobox(combo, options)
                 except tk.TclError:
                     pass
 
@@ -4428,16 +4475,17 @@ Write-UpdateLog 'helper done'
             match_row = ttk.Frame(left, style="Card.TFrame")
             match_row.pack(anchor="w", pady=(2, 0))
             ttk.Label(
-                match_row, text="Match to existing brand:", style="Card.TLabel",
+                match_row, text="Match to existing brand (type to search):", style="Card.TLabel",
                 font=("Segoe UI", 8),
             ).pack(side="left", padx=(0, 6))
             mvar = tk.StringVar(value="")
             match_vars[brand] = mvar
             combo = ttk.Combobox(
                 match_row, textvariable=mvar, values=match_options,
-                state="readonly", width=26, font=("Segoe UI", 8),
+                width=36, font=("Segoe UI", 8),
             )
             combo.pack(side="left")
+            self._wire_searchable_combobox(combo, match_options)
             match_combos.append(combo)
 
             # Right: multiplier entry + Variable toggle. Tiered brands default
@@ -4457,7 +4505,7 @@ Write-UpdateLog 'helper done'
             options = [""] + self._all_known_vendor_names()
             for combo in match_combos:
                 try:
-                    combo.configure(values=options)
+                    self._wire_searchable_combobox(combo, options)
                 except tk.TclError:
                     pass
 
