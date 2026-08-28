@@ -70,8 +70,8 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Fix Estimate upload XML parse error (omit ShipMethodRef — not valid on EstimateAdd)
-          - Type-to-search on Match to existing brand / Match Vendor Names comboboxes (large QB vendor lists)
+          - Fix update helper launch: cmd start was treating "DMQuotesUpdate" as an executable (Windows cannot find 'DMQuotesUpdate')
+          - Use start "" /min powershell so Setup actually runs after download
 
           SHA256: $sha
           "@
@@ -80,7 +80,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Fix Estimate upload (no ShipMethodRef on EstimateAdd); type-to-search brand/vendor match dropdowns."
+            notes = "Fix update helper launch (cmd start title vs program); Setup runs after download."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force

@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.067"
+APP_VERSION = "v1.068"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2489,19 +2489,17 @@ Write-UpdateLog 'helper done'
 
                 helper_env = _env_without_pyinstaller_state()
                 create_new_process_group = 0x00000200
-                argv = [
-                    "cmd.exe",
-                    "/c",
-                    "start",
-                    "DMQuotesUpdate",
-                    "/min",
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(helper_ps1),
-                ]
+                # cmd `start` treats the first quoted token as the *window title*.
+                # Without an explicit title, an unquoted "DMQuotesUpdate" was
+                # interpreted as the *program* → "Windows cannot find
+                # 'DMQuotesUpdate'". Empty title "" is required so /min applies
+                # to powershell.exe (the real command).
+                # Pass one /c string so "" survives CreateProcess quoting.
+                helper_cmd = (
+                    f'start "" /min powershell.exe -NoProfile '
+                    f'-ExecutionPolicy Bypass -File "{helper_ps1}"'
+                )
+                argv = ["cmd.exe", "/c", helper_cmd]
                 log.info(
                     "Update: spawning helper argv=%s creationflags=CREATE_NEW_PROCESS_GROUP(0x%x)",
                     argv,
