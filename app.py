@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.064"
+APP_VERSION = "v1.065"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -76,6 +76,38 @@ LEGACY_SETTINGS_FOLDER = "QB Sales Order Converter"
 SETTINGS_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / LEGACY_SETTINGS_FOLDER
 SETTINGS_PATH = SETTINGS_DIR / "settings.json"
 LOG_PATH = SETTINGS_DIR / "app.log"
+
+
+def _first_note_multiplier(note: str | None) -> float | None:
+    """Pull the leading rate from a tiered vendor note like
+    '0.45 | .405 [When ordering 12 or more...]'.
+    """
+    if not note:
+        return None
+    match = re.search(r"(\d*\.\d+|\d+)", str(note).replace(",", ""))
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def _env_without_pyinstaller_state() -> dict[str, str]:
+    """Environment for spawning a fresh DMQuotes instance.
+
+    Frozen onefile builds inherit private ``_PYI_*`` vars. Restarting without
+    clearing them (and without ``PYINSTALLER_RESET_ENVIRONMENT=1``) makes the
+    bootloader treat the new process as a worker of the old one and fail with
+    "Security validation failure: parent process has different executable!".
+    """
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("_PYI") and key != "PYINSTALLER_RESET_ENVIRONMENT"
+    }
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
 
 
 # --- "Time saved" estimate -------------------------------------------------
@@ -2305,6 +2337,13 @@ class SalesOrderApp:
                     'set "SETUP_EXIT=!ERRORLEVEL!"',
                     'echo %date% %time% [INFO] qb_so_app: Update: Setup.exe finished exit=!SETUP_EXIT!>>"%DMQ_LOG%"',
                     "timeout /t 1 /nobreak >nul",
+                    # Fresh onefile instance: clear inherited PyInstaller state
+                    # or relaunch fails with "parent process has different executable".
+                    "set PYINSTALLER_RESET_ENVIRONMENT=1",
+                    "set _PYI_ARCHIVE_FILE=",
+                    "set _PYI_APPLICATION_HOME_DIR=",
+                    "set _PYI_PARENT_PROCESS_LEVEL=",
+                    "set _PYI_SPLASH_IPC=",
                     f'if exist "{app_exe}" (',
                     f'  echo %date% %time% [INFO] qb_so_app: Update: relaunching "{app_exe}">>"%DMQ_LOG%"',
                     f'  start "" "{app_exe}"',
@@ -2331,11 +2370,13 @@ class SalesOrderApp:
                     | 0x08000000  # CREATE_NO_WINDOW
                 )
                 breakaway = detached | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
+                helper_env = _env_without_pyinstaller_state()
                 try:
                     proc = subprocess.Popen(
                         ["cmd.exe", "/c", str(helper_path)],
                         creationflags=breakaway,
                         close_fds=True,
+                        env=helper_env,
                     )
                     log.info("Update: helper PID=%s (breakaway)", getattr(proc, "pid", "?"))
                 except OSError:
@@ -2343,6 +2384,7 @@ class SalesOrderApp:
                         ["cmd.exe", "/c", str(helper_path)],
                         creationflags=detached,
                         close_fds=True,
+                        env=helper_env,
                     )
                     log.info("Update: helper PID=%s (detached fallback)", getattr(proc, "pid", "?"))
                 log.info(
@@ -4262,8 +4304,12 @@ class SalesOrderApp:
             match_combos.append(combo)
 
             # Right: multiplier entry + Variable toggle. Tiered brands default
-            # to Variable (ask each order); unknown brands default to locked.
-            var = tk.StringVar(value="")
+            # to Variable (ask each order) and pre-fill the leading note rate
+            # (e.g. Phylrich 0.45) so matching a QB vendor doesn't force retyping.
+            note_rate = _first_note_multiplier(note)
+            var = tk.StringVar(
+                value=("" if note_rate is None else f"{note_rate:g}")
+            )
             entry_vars[brand] = var
             ttk.Entry(row, textvariable=var, width=7).pack(side="right", padx=(8, 0))
             vbar = tk.BooleanVar(value=is_tiered)
@@ -4293,19 +4339,27 @@ class SalesOrderApp:
                     if match:
                         aliases[brand] = match
                         # Inherit pricing when the target already has a rate.
-                        # QB-only names (e.g. Deluxe Vanity) often have no
-                        # multiplier — still require one so Phylrich etc. work.
                         if match in priced:
                             continue
-                        if not text:
-                            raise ValueError(
-                                f"{brand}: “{match}” has no saved multiplier — "
-                                "enter one (e.g. 0.45 from the note), or pick a "
-                                "brand that already has pricing."
-                            )
-                        parsed[brand] = float(text)
-                        continue
+                        # QB-only names (Deluxe Vanity) have no multiplier —
+                        # use the typed rate, else the leading rate from this
+                        # brand's own note (Phylrich → 0.45).
+                        if text:
+                            parsed[brand] = float(text)
+                            continue
+                        note_rate = _first_note_multiplier(self.vendor_notes.get(brand))
+                        if note_rate is not None:
+                            parsed[brand] = note_rate
+                            continue
+                        raise ValueError(
+                            f"{brand}: “{match}” has no saved multiplier — "
+                            "enter one, or pick a brand that already has pricing."
+                        )
                     if not text:
+                        note_rate = _first_note_multiplier(self.vendor_notes.get(brand))
+                        if note_rate is not None:
+                            parsed[brand] = note_rate
+                            continue
                         raise ValueError(
                             f"{brand}: enter a multiplier or pick a brand to match it to."
                         )

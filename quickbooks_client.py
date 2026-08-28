@@ -110,12 +110,51 @@ def _relaunch_command() -> tuple[str, str]:
     return exe, params
 
 
+def _pyinstaller_reset_env(env: dict | None = None) -> dict:
+    """Env for starting a *new* top-level copy of this frozen app.
+
+    PyInstaller onefile (≥6.10) inherits ``_PYI_*`` markers from the parent.
+    Restarting without clearing them makes the bootloader treat the new
+    process as a worker of the old one and fail with:
+    ``Security validation failure: parent process has different executable!``
+    """
+    cleaned = dict(os.environ if env is None else env)
+    for key in list(cleaned):
+        if key.startswith("_PYI") or key.startswith("PYINSTALLER_"):
+            cleaned.pop(key, None)
+    cleaned["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return cleaned
+
+
+def _write_relaunch_cmd(exe: str, params: str) -> str:
+    """Write a .cmd that resets PyInstaller env then starts the app."""
+    launcher = os.path.join(tempfile.gettempdir(), "dmquotes_relaunch.cmd")
+    start_line = f'start "" "{exe}"'
+    if params.strip():
+        start_line = f'start "" "{exe}" {params}'
+    with open(launcher, "w", encoding="utf-8") as handle:
+        handle.write("@echo off\r\n")
+        handle.write("set PYINSTALLER_RESET_ENVIRONMENT=1\r\n")
+        # Drop inherited onefile markers so the bootloader starts clean.
+        handle.write("for /f \"tokens=1 delims==\" %%V in ('set _PYI 2^>nul') do set \"%%V=\"\r\n")
+        handle.write(f"{start_line}\r\n")
+    return launcher
+
+
 def relaunch_as_administrator() -> None:
     """Relaunch this app elevated via UAC, then exit the current process."""
-    import sys
-
     exe, params = _relaunch_command()
-    rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+    # ShellExecute "runas" on the .exe can still inherit _PYI_* from this
+    # process on some Windows builds — launch via a RESET .cmd instead.
+    launcher = _write_relaunch_cmd(exe, params)
+    rc = ctypes.windll.shell32.ShellExecuteW(
+        None,
+        "runas",
+        "cmd.exe",
+        f'/c ""{launcher}""',
+        None,
+        1,
+    )
     if rc <= 32:
         raise RuntimeError(
             f"Windows refused to relaunch as Administrator (ShellExecute code {rc})."
@@ -130,21 +169,13 @@ def relaunch_as_standard_user() -> None:
     as the logged-on shell user, so asking Explorer to open the exe starts a
     standard-user instance.
     """
-    import sys
-
     exe, params = _relaunch_command()
-    if getattr(sys, "frozen", False) and not params:
-        subprocess.Popen(["explorer.exe", exe], close_fds=True)
-    else:
-        # Write a tiny launcher so Explorer starts the same argv unelevated.
-        launcher = os.path.join(tempfile.gettempdir(), "dmquotes_relaunch.cmd")
-        cmdline = subprocess.list2cmdline([exe] + (
-            sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv
-        ))
-        with open(launcher, "w", encoding="utf-8") as handle:
-            handle.write("@echo off\r\n")
-            handle.write(f"start \"\" {cmdline}\r\n")
-        subprocess.Popen(["explorer.exe", launcher], close_fds=True)
+    launcher = _write_relaunch_cmd(exe, params)
+    subprocess.Popen(
+        ["explorer.exe", launcher],
+        close_fds=True,
+        env=_pyinstaller_reset_env(),
+    )
     os._exit(0)
 
 
