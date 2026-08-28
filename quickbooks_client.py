@@ -674,6 +674,101 @@ class QuickBooksClient:
         finally:
             self.close()
 
+    def _ensure_customer_exists(self, customer_name: str) -> str:
+        """Return the QuickBooks customer FullName, creating the customer if needed.
+
+        EstimateAdd/SalesOrderAdd fail with 3140 when CustomerRef FullName is
+        not in the Customer list. The tax-item helper already showed this case
+        via a missing EditSequence. Create a minimal CustomerAdd so upload can
+        proceed (same name the user typed in DMQuotes).
+        """
+        name = _clean(customer_name)
+        if not name:
+            raise RuntimeError("Customer name is required before uploading to QuickBooks.")
+
+        query_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="continueOnError">
+    <CustomerQueryRq>
+      <FullName>{name}</FullName>
+      <IncludeRetElement>ListID</IncludeRetElement>
+      <IncludeRetElement>FullName</IncludeRetElement>
+      <IncludeRetElement>Name</IncludeRetElement>
+    </CustomerQueryRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(query_xml)
+            root = ET.fromstring(response)
+            ret = root.find(".//CustomerRet")
+            if ret is not None:
+                found = (ret.findtext("FullName") or ret.findtext("Name") or "").strip()
+                if found:
+                    log.info("_ensure_customer_exists: found existing customer %r", found)
+                    return found
+        except Exception:
+            log.exception("_ensure_customer_exists: CustomerQuery failed for %r", customer_name)
+
+        log.info("_ensure_customer_exists: creating customer %r", name)
+        add_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="stopOnError">
+    <CustomerAddRq>
+      <CustomerAdd>
+        <Name>{name}</Name>
+      </CustomerAdd>
+    </CustomerAddRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+        try:
+            response = self._process(add_xml)
+        except Exception as exc:
+            log.exception("_ensure_customer_exists: CustomerAdd raised for %r", name)
+            raise RuntimeError(
+                f"QuickBooks customer “{customer_name}” was not found and could not be "
+                f"created ({exc}). Create the customer in QuickBooks, then try again."
+            ) from exc
+        try:
+            root = ET.fromstring(response)
+        except ET.ParseError as exc:
+            raise RuntimeError(
+                f"QuickBooks returned invalid XML while creating customer “{customer_name}”: {exc}"
+            ) from exc
+        rs = root.find(".//CustomerAddRs")
+        if rs is None:
+            raise RuntimeError(
+                f"QuickBooks did not confirm creating customer “{customer_name}”."
+            )
+        status_code = rs.attrib.get("statusCode", "")
+        status_message = rs.attrib.get("statusMessage", "")
+        if status_code != "0":
+            # 3100 = already exists (race / inactive / slight name match) —
+            # re-query once before failing.
+            if status_code == "3100":
+                log.warning(
+                    "_ensure_customer_exists: CustomerAdd 3100 for %r (%s); re-querying",
+                    name,
+                    status_message,
+                )
+                try:
+                    response = self._process(query_xml)
+                    found = ET.fromstring(response).findtext(
+                        ".//CustomerRet/FullName", default=""
+                    ).strip()
+                    if found:
+                        return found
+                except Exception:
+                    log.exception("_ensure_customer_exists: re-query after 3100 failed")
+            raise RuntimeError(
+                f"Could not create QuickBooks customer “{customer_name}” "
+                f"({status_code}): {status_message}"
+            )
+        created = root.findtext(".//CustomerRet/FullName", default="").strip() or name
+        log.info("_ensure_customer_exists: created customer %r", created)
+        return created
+
     def _customer_has_default_tax_item(self, customer_name: str) -> tuple[bool, str]:
         """Check whether a customer already has a default ItemSalesTaxRef.
 
@@ -1004,6 +1099,12 @@ class QuickBooksClient:
         _progress("Connecting to QuickBooks...")
         self.connect()
         try:
+            # Ensure the customer exists before EstimateAdd/SalesOrderAdd.
+            # Missing customers previously surfaced as opaque 3140 on CustomerRef
+            # (and as a missing EditSequence when setting the default tax item).
+            _progress(f"Checking customer “{customer_name}” in QuickBooks...")
+            customer_name = self._ensure_customer_exists(customer_name)
+
             # Best-effort: set the customer's default ItemSalesTaxRef when
             # missing (helps manual SO entry). SalesOrderAdd also sends
             # ItemSalesTaxRef on the transaction (required for CA / 3180).

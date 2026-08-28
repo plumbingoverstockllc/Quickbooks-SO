@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.068"
+APP_VERSION = "v1.069"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -2988,8 +2988,8 @@ Write-UpdateLog 'helper done'
     def _build_sidebar(self, sidebar: tk.Frame) -> None:
         """DMQuotes brand block. Loads the actual logo PNG bundled with
         the app (which contains the document/arrow/ring graphic plus
-        the wordmark and tagline) and pins Shimiralabs + version at the
-        bottom.
+        the wordmark and tagline) and pins the Shimira Labs mark + version
+        at the bottom.
         """
         c = UI
 
@@ -3064,12 +3064,31 @@ Write-UpdateLog 'helper done'
             font=("Segoe UI", 9),
         ).pack(side="bottom", pady=(0, 12))
 
-        # Subtle "made by" line above the version.
-        tk.Label(
-            sidebar, text="Shimiralabs",
-            bg=c["bg_sidebar"], fg=c["sidebar_text_muted"],
-            font=("Segoe UI", 8),
-        ).pack(side="bottom")
+        # Shimira Labs mark above the version (replaces plain "Shimiralabs" text).
+        self._sidebar_shimira_image = None
+        shimira_path = _resource_path("Shimira_Labs.png")
+        shimira_loaded = False
+        if shimira_path.exists():
+            try:
+                from PIL import Image, ImageTk
+                shimira = Image.open(str(shimira_path)).convert("RGBA")
+                shimira.thumbnail((168, 72), Image.LANCZOS)
+                self._sidebar_shimira_image = ImageTk.PhotoImage(shimira)
+                tk.Label(
+                    sidebar,
+                    image=self._sidebar_shimira_image,
+                    bg=c["bg_sidebar"],
+                    borderwidth=0,
+                ).pack(side="bottom", pady=(0, 4))
+                shimira_loaded = True
+            except Exception:
+                log.exception("_build_sidebar: failed to load Shimira_Labs.png")
+        if not shimira_loaded:
+            tk.Label(
+                sidebar, text="Shimira Labs",
+                bg=c["bg_sidebar"], fg=c["sidebar_text_muted"],
+                font=("Segoe UI", 8),
+            ).pack(side="bottom")
 
     def _draw_rounded_rect(self, canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int, radius: int, fill: str) -> None:
         """Approximate a filled rounded rectangle on a Tk canvas using four
@@ -3405,50 +3424,191 @@ Write-UpdateLog 'helper done'
                 names.add(src)
         return sorted(n for n in names if n)
 
-    def _wire_searchable_combobox(self, combo: ttk.Combobox, all_values: list[str]) -> None:
-        """Let the user type to filter a long Combobox (1000+ QB vendors).
+    def _make_vendor_search_picker(
+        self,
+        parent: tk.Misc,
+        textvariable: tk.StringVar,
+        all_values: list[str],
+        *,
+        width: int = 36,
+        font: tuple | None = None,
+    ) -> dict:
+        """Typable Entry + filtered popup list for long vendor lists.
 
-        ``readonly`` forces scrolling the entire list. ``normal`` + KeyRelease
-        filtering keeps the dropdown usable when matching Phylrich → Deluxe, etc.
+        ttk.Combobox on Windows does not reliably accept typing while the
+        dropdown is open (and ``readonly`` forces scroll-only). This control
+        is a normal Entry: type to filter, click a row (or ↓ then Enter) to
+        pick, ▾ to browse.
         """
-        full = [""] + [v for v in all_values if v]
-        # Deduplicate while preserving order ("" first).
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for value in full:
-            if value in seen:
-                continue
-            seen.add(value)
-            ordered.append(value)
-        full = ordered
-        combo.configure(values=full, state="normal")
+        def _normalize(values: list[str]) -> list[str]:
+            seen: set[str] = set()
+            ordered: list[str] = []
+            for value in values:
+                text = str(value or "").strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                ordered.append(text)
+            return ordered
 
-        def on_key(event: tk.Event) -> None:
-            if event.keysym in (
-                "Return", "Escape", "Tab", "Up", "Down", "Left", "Right",
-                "Home", "End", "Prior", "Next", "Shift_L", "Shift_R",
-                "Control_L", "Control_R", "Alt_L", "Alt_R",
-            ):
-                return
-            typed = combo.get()
-            needle = typed.strip().lower()
-            if not needle:
-                filtered = full
-            else:
-                filtered = [v for v in full if v and needle in v.lower()]
-                if not filtered:
-                    filtered = [typed] if typed else [""]
-            combo.configure(values=filtered)
+        state: dict = {"values": _normalize(all_values), "popup": None, "listbox": None}
+        frame = ttk.Frame(parent)
+        entry_kw: dict = {"textvariable": textvariable, "width": width}
+        if font is not None:
+            entry_kw["font"] = font
+        entry = ttk.Entry(frame, **entry_kw)
+        entry.pack(side="left", fill="x", expand=True)
 
-        def on_focus_out(_event: tk.Event | None = None) -> None:
-            # Restore the full list so the next open isn't stuck on a filter.
+        def destroy_popup() -> None:
+            pop = state.get("popup")
+            if pop is not None:
+                try:
+                    pop.destroy()
+                except tk.TclError:
+                    pass
+            state["popup"] = None
+            state["listbox"] = None
+
+        def apply_selection(value: str) -> None:
+            textvariable.set(value)
+            destroy_popup()
             try:
-                combo.configure(values=full)
+                entry.icursor(tk.END)
+                entry.focus_set()
             except tk.TclError:
                 pass
 
-        combo.bind("<KeyRelease>", on_key)
-        combo.bind("<FocusOut>", on_focus_out)
+        def filtered_values() -> list[str]:
+            needle = (textvariable.get() or "").strip().lower()
+            values = state["values"]
+            if not needle:
+                return values[:250]
+            return [v for v in values if needle in v.lower()][:250]
+
+        def show_popup(items: list[str]) -> None:
+            destroy_popup()
+            if not items:
+                return
+            pop = tk.Toplevel(entry)
+            pop.wm_overrideredirect(True)
+            try:
+                pop.attributes("-topmost", True)
+            except tk.TclError:
+                pass
+            try:
+                entry.update_idletasks()
+                x = entry.winfo_rootx()
+                y = entry.winfo_rooty() + entry.winfo_height()
+                w = max(entry.winfo_width(), 280)
+            except tk.TclError:
+                return
+            height = min(240, 18 * min(len(items), 14) + 6)
+            pop.geometry(f"{w}x{height}+{x}+{y}")
+            lb = tk.Listbox(
+                pop,
+                exportselection=False,
+                activestyle="dotbox",
+                font=font or ("Segoe UI", 9),
+            )
+            sb = ttk.Scrollbar(pop, orient="vertical", command=lb.yview)
+            lb.configure(yscrollcommand=sb.set)
+            sb.pack(side="right", fill="y")
+            lb.pack(side="left", fill="both", expand=True)
+            for item in items:
+                lb.insert(tk.END, item)
+
+            def on_pick(_event: tk.Event | None = None) -> None:
+                sel = lb.curselection()
+                if sel:
+                    apply_selection(lb.get(sel[0]))
+
+            def on_lb_key(event: tk.Event) -> str | None:
+                if event.keysym == "Return":
+                    on_pick()
+                    return "break"
+                if event.keysym == "Escape":
+                    destroy_popup()
+                    entry.focus_set()
+                    return "break"
+                return None
+
+            lb.bind("<ButtonRelease-1>", on_pick)
+            lb.bind("<Double-Button-1>", on_pick)
+            lb.bind("<KeyPress>", on_lb_key)
+            state["popup"] = pop
+            state["listbox"] = lb
+
+            def maybe_close() -> None:
+                try:
+                    focused = entry.focus_get()
+                except tk.TclError:
+                    destroy_popup()
+                    return
+                widget = focused
+                while widget is not None:
+                    if widget in (entry, pop, lb, frame):
+                        return
+                    widget = getattr(widget, "master", None)
+                destroy_popup()
+
+            def on_focus_out(_event: tk.Event) -> None:
+                entry.after(180, maybe_close)
+
+            entry.bind("<FocusOut>", on_focus_out, add="+")
+            lb.bind("<FocusOut>", on_focus_out, add="+")
+
+        def on_key_release(event: tk.Event) -> str | None:
+            if event.keysym in (
+                "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+                "Left", "Right", "Home", "End", "Tab",
+            ):
+                return None
+            if event.keysym == "Escape":
+                destroy_popup()
+                return "break"
+            if event.keysym == "Down":
+                items = filtered_values()
+                show_popup(items)
+                lb = state.get("listbox")
+                if lb is not None and lb.size() > 0:
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(0)
+                    lb.activate(0)
+                    lb.focus_set()
+                return "break"
+            if event.keysym == "Return":
+                lb = state.get("listbox")
+                if lb is not None and lb.curselection():
+                    apply_selection(lb.get(lb.curselection()[0]))
+                    return "break"
+                destroy_popup()
+                return None
+            show_popup(filtered_values())
+            return None
+
+        def open_browse() -> None:
+            show_popup(filtered_values())
+            try:
+                entry.focus_set()
+            except tk.TclError:
+                pass
+
+        entry.bind("<KeyRelease>", on_key_release)
+        ttk.Button(frame, text="▾", width=3, command=open_browse).pack(
+            side="left", padx=(2, 0)
+        )
+
+        def set_values(new_values: list[str]) -> None:
+            state["values"] = _normalize(new_values)
+            destroy_popup()
+
+        frame.bind("<Destroy>", lambda _e: destroy_popup())
+        return {
+            "frame": frame,
+            "entry": entry,
+            "set_values": set_values,
+            "destroy_popup": destroy_popup,
+        }
 
     def _unmatched_source_brands(self) -> list[str]:
         if self.source_df is None or self.source_df.empty:
@@ -3551,7 +3711,7 @@ Write-UpdateLog 'helper done'
         scroll.pack(side="right", fill="y", pady=8)
 
         match_options = [""] + known
-        match_combos: list[ttk.Combobox] = []
+        match_pickers: list[dict] = []
         brand_vars: dict[str, tk.StringVar] = {}
         for brand in unmatched_brands:
             suggestion = suggest_vendor(brand, known) or ""
@@ -3560,10 +3720,15 @@ Write-UpdateLog 'helper done'
             row = ttk.Frame(inner, style="Card.TFrame")
             row.pack(fill="x", padx=10, pady=6)
             ttk.Label(row, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
-            combo = ttk.Combobox(row, textvariable=var, values=match_options, width=48)
-            combo.pack(fill="x", pady=(2, 0))
-            self._wire_searchable_combobox(combo, match_options)
-            match_combos.append(combo)
+            ttk.Label(
+                row,
+                text="Type to search, then click a match (or use ▾)",
+                style="Card.TLabel",
+                font=("Segoe UI", 8),
+            ).pack(anchor="w")
+            picker = self._make_vendor_search_picker(row, var, match_options, width=48)
+            picker["frame"].pack(fill="x", pady=(2, 0))
+            match_pickers.append(picker)
 
         line_vars: dict[int, tk.StringVar] = {}
         for excel_line, sku in blank_rows:
@@ -3577,16 +3742,15 @@ Write-UpdateLog 'helper done'
                 style="Card.TLabel",
                 font=("Segoe UI Semibold", 9),
             ).pack(anchor="w")
-            combo = ttk.Combobox(row, textvariable=var, values=match_options, width=48)
-            combo.pack(fill="x", pady=(2, 0))
-            self._wire_searchable_combobox(combo, match_options)
-            match_combos.append(combo)
+            picker = self._make_vendor_search_picker(row, var, match_options, width=48)
+            picker["frame"].pack(fill="x", pady=(2, 0))
+            match_pickers.append(picker)
 
         def refresh_match_options() -> None:
-            options = [""] + self._all_known_vendor_names()
-            for combo in match_combos:
+            options = self._all_known_vendor_names()
+            for picker in match_pickers:
                 try:
-                    self._wire_searchable_combobox(combo, options)
+                    picker["set_values"](options)
                 except tk.TclError:
                     pass
 
@@ -4452,15 +4616,15 @@ Write-UpdateLog 'helper done'
         entry_vars: dict[str, tk.StringVar] = {}
         variable_vars: dict[str, tk.BooleanVar] = {}
         match_vars: dict[str, tk.StringVar] = {}
-        match_combos: list[ttk.Combobox] = []
+        match_pickers: list[dict] = []
         for brand in missing_brands:
             note = self.vendor_notes.get(brand)
             is_tiered = bool(note)
             row = ttk.Frame(inner, style="Card.TFrame")
             row.pack(fill="x", padx=10, pady=6)
 
-            # Left column: brand name, vendor note, and a "match to existing
-            # brand" dropdown for when the source used a wrong/alias name.
+            # Left column: brand name, vendor note, and a typable vendor search
+            # for when the source used a wrong/alias name.
             left = ttk.Frame(row, style="Card.TFrame")
             left.pack(side="left", fill="x", expand=True)
             ttk.Label(left, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
@@ -4470,21 +4634,19 @@ Write-UpdateLog 'helper done'
                     foreground=UI["accent"], wraplength=360, justify="left",
                     font=("Segoe UI", 8),
                 ).pack(anchor="w")
-            match_row = ttk.Frame(left, style="Card.TFrame")
-            match_row.pack(anchor="w", pady=(2, 0))
             ttk.Label(
-                match_row, text="Match to existing brand (type to search):", style="Card.TLabel",
+                left,
+                text="Match to existing brand (type to search):",
+                style="Card.TLabel",
                 font=("Segoe UI", 8),
-            ).pack(side="left", padx=(0, 6))
+            ).pack(anchor="w", pady=(2, 0))
             mvar = tk.StringVar(value="")
             match_vars[brand] = mvar
-            combo = ttk.Combobox(
-                match_row, textvariable=mvar, values=match_options,
-                width=36, font=("Segoe UI", 8),
+            picker = self._make_vendor_search_picker(
+                left, mvar, match_options, width=42, font=("Segoe UI", 9),
             )
-            combo.pack(side="left")
-            self._wire_searchable_combobox(combo, match_options)
-            match_combos.append(combo)
+            picker["frame"].pack(fill="x", pady=(2, 0))
+            match_pickers.append(picker)
 
             # Right: multiplier entry + Variable toggle. Tiered brands default
             # to Variable (ask each order) and pre-fill the leading note rate
@@ -4500,10 +4662,10 @@ Write-UpdateLog 'helper done'
             ttk.Checkbutton(row, text="Variable", variable=vbar, style="TCheckbutton").pack(side="right")
 
         def refresh_match_options() -> None:
-            options = [""] + self._all_known_vendor_names()
-            for combo in match_combos:
+            options = self._all_known_vendor_names()
+            for picker in match_pickers:
                 try:
-                    self._wire_searchable_combobox(combo, options)
+                    picker["set_values"](options)
                 except tk.TclError:
                     pass
 

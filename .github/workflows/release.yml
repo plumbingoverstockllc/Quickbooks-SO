@@ -28,7 +28,7 @@ jobs:
 
       - name: Build DMQuotes.exe
         run: |
-          python -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" --collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd --collect-all pdfplumber --collect-all pdfminer --collect-all cryptography --collect-all cffi --collect-all charset_normalizer --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." --add-data "vendor_pricing.json;." app.py
+          python -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" --collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd --collect-all pdfplumber --collect-all pdfminer --collect-all cryptography --collect-all cffi --collect-all charset_normalizer --add-data "Logo_New.png;." --add-data "Shimira_Labs.png;." --add-data "DMQuotes.ico;." --add-data "vendor_pricing.json;." app.py
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -70,8 +70,9 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Fix update helper launch: cmd start was treating "DMQuotesUpdate" as an executable (Windows cannot find 'DMQuotesUpdate')
-          - Use start "" /min powershell so Setup actually runs after download
+          - Create missing QuickBooks customers before Estimate/SO upload (fixes 3140 CustomerRef)
+          - Real type-to-search vendor match (Entry + filtered list; Combobox was not typable)
+          - Shimira Labs logo in the sidebar instead of plain text
 
           SHA256: $sha
           "@
@@ -80,7 +81,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Fix update helper launch (cmd start title vs program); Setup runs after download."
+            notes = "Auto-create missing QB customers (3140 fix); typable vendor search; Shimira Labs logo."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force
