@@ -70,9 +70,10 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Fix PyInstaller relaunch error ("parent process has different executable") after updates and elevation changes
-          - Matching Phylrich (and other noted brands) to a QuickBooks vendor uses the note rate (e.g. 0.45) without retyping
-          - Prefill the multiplier box from the vendor note on Brand Pricing
+          - Fix silent update helper that exited without running Setup (invalid DETACHED_PROCESS + CREATE_NO_WINDOW flags)
+          - PowerShell update applicator logs every command, PID, and Setup exit code
+          - Inno Setup /LOG is appended into app.log and update.log (every file replaced during install)
+          - Relaunch only after Setup exit code 0
 
           SHA256: $sha
           "@
@@ -81,7 +82,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Fix PyInstaller relaunch security error; matching a brand to a QuickBooks vendor uses the note multiplier (e.g. Phylrich 0.45)."
+            notes = "Fix update helper so Setup actually runs; log every update command and every file Inno replaces into app.log/update.log."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force

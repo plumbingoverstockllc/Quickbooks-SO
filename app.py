@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.065"
+APP_VERSION = "v1.066"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1406,6 +1406,7 @@ class SalesOrderApp:
             font=("Segoe UI", 10),
         )
         log_menu.add_command(label="Open Log File", command=self.open_log_file)
+        log_menu.add_command(label="Open Update Log", command=self.open_update_log)
         log_menu.add_command(label="Show Log Folder", command=self.reveal_log_folder)
         log_menu.add_separator()
         log_menu.add_command(label="Send Logs to Support", command=self.send_logs_to_support)
@@ -1429,6 +1430,26 @@ class SalesOrderApp:
             messagebox.showerror(
                 "Log",
                 f"Could not open the log file at:\n{LOG_PATH}\n\n{exc}",
+            )
+
+    def open_update_log(self) -> None:
+        update_log = SETTINGS_DIR / "update.log"
+        log.info("User opened update log via menu (%s)", update_log)
+        try:
+            SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+            if not update_log.exists():
+                update_log.write_text(
+                    "No update has been recorded yet. After you install an "
+                    "update, every Setup command and every file Inno replaces "
+                    "is written here.\n",
+                    encoding="utf-8",
+                )
+            subprocess.Popen(["notepad.exe", str(update_log)])
+        except Exception as exc:
+            log.exception("Failed to open update log")
+            messagebox.showerror(
+                "Log",
+                f"Could not open the update log at:\n{update_log}\n\n{exc}",
             )
 
     def reveal_log_folder(self) -> None:
@@ -2310,86 +2331,202 @@ class SalesOrderApp:
                     log.warning("Update: no sha256 in feed — skipping checksum")
 
                 update_ui("Starting installer… the app will reopen when done.", 100)
-                # Detach the updater from this process tree. If Setup runs as a
-                # child of (often elevated) DMQuotes.exe, PrepareToInstall /
-                # FORCECLOSEAPPLICATIONS can wipe the installer out with the
-                # app and nothing ever relaunches. A breakaway helper waits for
-                # Setup, then starts the new exe itself (Inno [Run] is backup).
+                # IMPORTANT: do NOT combine DETACHED_PROCESS with CREATE_NO_WINDOW
+                # — MSDN forbids it; that combo made the v1.064 helper exit without
+                # running Setup (no helper log lines, then old exe relaunched).
+                #
+                # Flow: PowerShell applicator (outlives this process) runs Setup
+                # with Inno /LOG, appends every Setup line into update.log /
+                # app.log, and only relaunches DMQuotes when Setup exit code is 0.
                 program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
                 app_exe = Path(program_files) / "DMQuotes" / "DMQuotes.exe"
-                helper_path = temp_dir / "apply_update.cmd"
-                # Helper keeps writing to the same app.log after this process
-                # exits, so Support can see installer wait + relaunch steps.
-                log_path = str(LOG_PATH)
-                helper_lines = [
-                    "@echo off",
-                    "setlocal EnableDelayedExpansion",
-                    f'set "DMQ_LOG={log_path}"',
-                    (
-                        f'echo %date% %time% [INFO] qb_so_app: Update: helper started '
-                        f'(installer={installer_path})>>"%DMQ_LOG%"'
-                    ),
-                    (
-                        'echo %date% %time% [INFO] qb_so_app: Update: launching Setup.exe '
-                        '/VERYSILENT>>"%DMQ_LOG%"'
-                    ),
-                    f'start /wait "" "{installer_path}" /VERYSILENT /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS',
-                    'set "SETUP_EXIT=!ERRORLEVEL!"',
-                    'echo %date% %time% [INFO] qb_so_app: Update: Setup.exe finished exit=!SETUP_EXIT!>>"%DMQ_LOG%"',
-                    "timeout /t 1 /nobreak >nul",
-                    # Fresh onefile instance: clear inherited PyInstaller state
-                    # or relaunch fails with "parent process has different executable".
-                    "set PYINSTALLER_RESET_ENVIRONMENT=1",
-                    "set _PYI_ARCHIVE_FILE=",
-                    "set _PYI_APPLICATION_HOME_DIR=",
-                    "set _PYI_PARENT_PROCESS_LEVEL=",
-                    "set _PYI_SPLASH_IPC=",
-                    f'if exist "{app_exe}" (',
-                    f'  echo %date% %time% [INFO] qb_so_app: Update: relaunching "{app_exe}">>"%DMQ_LOG%"',
-                    f'  start "" "{app_exe}"',
-                    ") else (",
-                    (
-                        '  echo %date% %time% [INFO] qb_so_app: Update: relaunching '
-                        'default %ProgramFiles%\\DMQuotes\\DMQuotes.exe>>"%DMQ_LOG%"'
-                    ),
-                    r'  start "" "%ProgramFiles%\DMQuotes\DMQuotes.exe"',
-                    ")",
-                    'echo %date% %time% [INFO] qb_so_app: Update: helper done>>"%DMQ_LOG%"',
-                    'del "%~f0" >nul 2>&1',
-                    "",
-                ]
-                helper_path.write_text("\r\n".join(helper_lines), encoding="utf-8")
+                update_log = SETTINGS_DIR / "update.log"
+                inno_log = temp_dir / "inno_setup.log"
+                helper_ps1 = temp_dir / "apply_update.ps1"
+                SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+                def _ps_lit(value: Path | str) -> str:
+                    return str(value).replace("'", "''")
+
+                ps = f"""
+$ErrorActionPreference = 'Continue'
+$appLog = '{_ps_lit(LOG_PATH)}'
+$updateLog = '{_ps_lit(update_log)}'
+$innoLog = '{_ps_lit(inno_log)}'
+$setup = '{_ps_lit(installer_path)}'
+$appExe = '{_ps_lit(app_exe)}'
+$fallbackExe = Join-Path $env:ProgramFiles 'DMQuotes\\DMQuotes.exe'
+
+function Write-UpdateLog([string]$Message) {{
+    $line = "{{0:yyyy-MM-dd HH:mm:ss}} [INFO] qb_so_app: Update: {{1}}" -f (Get-Date), $Message
+    try {{ Add-Content -LiteralPath $appLog -Value $line -Encoding UTF8 }} catch {{}}
+    try {{ Add-Content -LiteralPath $updateLog -Value $line -Encoding UTF8 }} catch {{}}
+}}
+
+Write-UpdateLog ("helper PowerShell started pid={{0}}" -f $PID)
+try {{
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($id)
+    $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}} catch {{
+    $isAdmin = $false
+    $id = $null
+}}
+Write-UpdateLog ("helper identity={{0}} isAdmin={{1}}" -f $(if ($id) {{ $id.Name }} else {{ '?' }}), $isAdmin)
+Write-UpdateLog ("setup path exists={{0}} path={{1}}" -f (Test-Path -LiteralPath $setup), $setup)
+Write-UpdateLog ("app exe before install exists={{0}} path={{1}}" -f (Test-Path -LiteralPath $appExe), $appExe)
+if (Test-Path -LiteralPath $appExe) {{
+    try {{
+        $vi = (Get-Item -LiteralPath $appExe).VersionInfo
+        Write-UpdateLog ("app exe before ProductVersion={{0}} FileVersion={{1}} Length={{2}}" -f $vi.ProductVersion, $vi.FileVersion, (Get-Item -LiteralPath $appExe).Length)
+    }} catch {{
+        Write-UpdateLog ("app exe before version probe failed: {{0}}" -f $_)
+    }}
+}}
+
+if (Test-Path -LiteralPath $innoLog) {{ Remove-Item -LiteralPath $innoLog -Force -ErrorAction SilentlyContinue }}
+$argList = @(
+    '/SILENT',
+    '/NORESTART',
+    '/CLOSEAPPLICATIONS',
+    '/FORCECLOSEAPPLICATIONS',
+    ('/LOG={{0}}' -f $innoLog)
+)
+$argString = ($argList -join ' ')
+Write-UpdateLog 'command shell=powershell.exe Start-Process'
+Write-UpdateLog ("command FilePath={{0}}" -f $setup)
+Write-UpdateLog ("command ArgumentList={{0}}" -f $argString)
+Write-UpdateLog ("command Wait=True PassThru=True Verb={{0}}" -f ($(if ($isAdmin) {{ '(none — already elevated)' }} else {{ 'RunAs' }})))
+
+$exitCode = -1
+try {{
+    if ($isAdmin) {{
+        $p = Start-Process -FilePath $setup -ArgumentList $argList -Wait -PassThru
+    }} else {{
+        $p = Start-Process -FilePath $setup -ArgumentList $argList -Verb RunAs -Wait -PassThru
+    }}
+    if ($null -ne $p) {{
+        $exitCode = $p.ExitCode
+        Write-UpdateLog ("Setup process Id={{0}} ExitCode={{1}} HasExited={{2}}" -f $p.Id, $p.ExitCode, $p.HasExited)
+    }} else {{
+        Write-UpdateLog 'Setup Start-Process returned null process object'
+    }}
+}} catch {{
+    Write-UpdateLog ("Setup Start-Process FAILED: {{0}}" -f $_)
+    $exitCode = -1
+}}
+
+Write-UpdateLog ("Inno /LOG exists={{0}} path={{1}}" -f (Test-Path -LiteralPath $innoLog), $innoLog)
+if (Test-Path -LiteralPath $innoLog) {{
+    Write-UpdateLog '--- begin Inno Setup /LOG (every file copied/replaced) ---'
+    try {{
+        Get-Content -LiteralPath $innoLog -ErrorAction Stop | ForEach-Object {{
+            $line = "{{0:yyyy-MM-dd HH:mm:ss}} [INFO] qb_so_app: Update/Inno: {{1}}" -f (Get-Date), $_
+            try {{ Add-Content -LiteralPath $appLog -Value $line -Encoding UTF8 }} catch {{}}
+            try {{ Add-Content -LiteralPath $updateLog -Value $line -Encoding UTF8 }} catch {{}}
+        }}
+    }} catch {{
+        Write-UpdateLog ("failed reading Inno /LOG: {{0}}" -f $_)
+    }}
+    Write-UpdateLog '--- end Inno Setup /LOG ---'
+}} else {{
+    Write-UpdateLog 'WARNING: Inno /LOG was not created — Setup may not have started'
+}}
+
+if (Test-Path -LiteralPath $appExe) {{
+    try {{
+        $vi = (Get-Item -LiteralPath $appExe).VersionInfo
+        Write-UpdateLog ("app exe after ProductVersion={{0}} FileVersion={{1}} Length={{2}}" -f $vi.ProductVersion, $vi.FileVersion, (Get-Item -LiteralPath $appExe).Length)
+    }} catch {{
+        Write-UpdateLog ("app exe after version probe failed: {{0}}" -f $_)
+    }}
+}} else {{
+    Write-UpdateLog 'app exe missing after Setup'
+}}
+
+if ($exitCode -ne 0) {{
+    Write-UpdateLog ("ABORT relaunch — Setup exit code {{0}} (expected 0)" -f $exitCode)
+    try {{
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            ("DMQuotes update failed (Setup exit {{0}}). See Log → Open Log File and update.log for details." -f $exitCode),
+            'DMQuotes Update Failed'
+        ) | Out-Null
+    }} catch {{}}
+    exit $exitCode
+}}
+
+Write-UpdateLog 'Setup exit 0 — preparing relaunch with PYINSTALLER_RESET_ENVIRONMENT=1'
+$env:PYINSTALLER_RESET_ENVIRONMENT = '1'
+Get-ChildItem Env: | Where-Object {{ $_.Name -like '_PYI*' }} | ForEach-Object {{
+    Write-UpdateLog ("clearing env {{0}}" -f $_.Name)
+    Remove-Item ("Env:{{0}}" -f $_.Name) -ErrorAction SilentlyContinue
+}}
+
+$launch = if (Test-Path -LiteralPath $appExe) {{ $appExe }} else {{ $fallbackExe }}
+Write-UpdateLog ("command shell=powershell.exe Start-Process FilePath={{0}}" -f $launch)
+try {{
+    $rp = Start-Process -FilePath $launch -PassThru
+    Write-UpdateLog ("relaunch started pid={{0}}" -f $rp.Id)
+}} catch {{
+    Write-UpdateLog ("relaunch FAILED: {{0}}" -f $_)
+    exit 2
+}}
+Write-UpdateLog 'helper done'
+"""
+                helper_ps1.write_text(ps.strip() + "\n", encoding="utf-8")
+                log.info("Update: wrote PowerShell helper %s", helper_ps1)
+                log.info("Update: app.log=%s", LOG_PATH)
+                log.info("Update: update.log=%s", update_log)
+                log.info("Update: inno /LOG will be %s", inno_log)
                 log.info(
-                    "Update: wrote helper %s; launching detached (relaunch target=%s)",
-                    helper_path,
-                    app_exe,
+                    "Update: setup file=%s exists=%s size=%s",
+                    installer_path,
+                    installer_path.exists(),
+                    installer_path.stat().st_size if installer_path.exists() else "n/a",
                 )
-                detached = (
-                    getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-                    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-                    | 0x08000000  # CREATE_NO_WINDOW
-                )
-                breakaway = detached | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
+                log.info("Update: relaunch target=%s exists=%s", app_exe, app_exe.exists())
+
                 helper_env = _env_without_pyinstaller_state()
-                try:
-                    proc = subprocess.Popen(
-                        ["cmd.exe", "/c", str(helper_path)],
-                        creationflags=breakaway,
-                        close_fds=True,
-                        env=helper_env,
-                    )
-                    log.info("Update: helper PID=%s (breakaway)", getattr(proc, "pid", "?"))
-                except OSError:
-                    proc = subprocess.Popen(
-                        ["cmd.exe", "/c", str(helper_path)],
-                        creationflags=detached,
-                        close_fds=True,
-                        env=helper_env,
-                    )
-                    log.info("Update: helper PID=%s (detached fallback)", getattr(proc, "pid", "?"))
+                create_new_process_group = 0x00000200
+                argv = [
+                    "cmd.exe",
+                    "/c",
+                    "start",
+                    "DMQuotesUpdate",
+                    "/min",
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(helper_ps1),
+                ]
+                log.info(
+                    "Update: spawning helper argv=%s creationflags=CREATE_NEW_PROCESS_GROUP(0x%x)",
+                    argv,
+                    create_new_process_group,
+                )
+                log.info(
+                    "Update: helper env PYINSTALLER_RESET_ENVIRONMENT=%s _PYI_* cleared=%s",
+                    helper_env.get("PYINSTALLER_RESET_ENVIRONMENT"),
+                    not any(k.startswith("_PYI") for k in helper_env),
+                )
+                proc = subprocess.Popen(
+                    argv,
+                    creationflags=create_new_process_group,
+                    close_fds=True,
+                    env=helper_env,
+                    cwd=str(temp_dir),
+                )
+                log.info(
+                    "Update: helper launcher PID=%s (cmd start → minimized powershell)",
+                    getattr(proc, "pid", "?"),
+                )
+                time.sleep(1.5)
                 log.info(
                     "Update: closing this process so Setup can replace files "
-                    "(current=%s)",
+                    "(current=%s) — further lines come from the PowerShell helper / Inno /LOG",
                     APP_VERSION,
                 )
                 for handler in log.handlers:
@@ -2397,7 +2534,7 @@ class SalesOrderApp:
                         handler.flush()
                     except Exception:
                         pass
-                self.root.after(800, self.root.destroy)
+                self.root.after(500, self.root.destroy)
             except Exception as exc:
                 log.exception("Update: worker failed")
                 fail_ui(str(exc))
