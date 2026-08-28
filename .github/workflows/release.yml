@@ -70,9 +70,8 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Update helper now launches PowerShell directly (no cmd.exe), ending the quoting bugs behind "Windows cannot find" errors
-          - The app refuses to close until the helper confirms it started, and opens the installer itself if it did not
-          - Fetch Next pulls the next Estimate number when Estimate is selected (estimates are numbered separately from sales orders)
+          - Setup now clears the PyInstaller variables it inherits from the running app, so the relaunch after an update no longer fails with "Security validation failure: parent process has different executable!"
+          - This makes upgrades work from any older build, including ones whose own updater does not clean up after itself
 
           SHA256: $sha
           "@
@@ -81,7 +80,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Update helper launches PowerShell directly with a start handshake; Fetch Next uses the Estimate number sequence."
+            notes = "Setup clears inherited PyInstaller environment variables so the post-update relaunch no longer hits the bootloader security check."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force

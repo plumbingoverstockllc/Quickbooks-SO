@@ -13,7 +13,9 @@ launched from an argv list with no shell in between.
 """
 from __future__ import annotations
 
+import re
 import subprocess
+from pathlib import Path
 
 DETACHED_PROCESS = 0x00000008
 CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -70,9 +72,31 @@ def test_creationflags_are_a_legal_combination():
     assert flags & CREATE_NEW_PROCESS_GROUP
 
 
+def test_installer_scrubs_pyinstaller_env_before_relaunch():
+    """v1.070: upgrading from an old build died with "Security validation
+    failure: parent process has different executable!" because Setup inherited
+    the running app's _PYI_* variables and passed them to the [Run] relaunch.
+    Old builds cannot be fixed retroactively, so Setup has to do the scrub."""
+    iss = Path(__file__).with_name("installer.iss").read_text(encoding="utf-8")
+
+    for name in (
+        "_PYI_ARCHIVE_FILE",
+        "_PYI_APPLICATION_HOME_DIR",
+        "_PYI_PARENT_PROCESS_LEVEL",
+    ):
+        assert name in iss, f"{name} is no longer cleared by Setup"
+    assert "PYINSTALLER_RESET_ENVIRONMENT" in iss
+
+    # The scrub is only useful if it runs before Setup spawns anything.
+    init = re.search(r"function InitializeSetup\(\).*?\bend;", iss, re.DOTALL)
+    assert init, "InitializeSetup is gone"
+    assert "ResetPyInstallerEnvironment" in init.group(0)
+
+
 if __name__ == "__main__":
     test_no_shell_in_launch_chain()
     test_no_embedded_quotes_survive_list2cmdline()
     test_helper_path_is_its_own_argument()
     test_creationflags_are_a_legal_combination()
+    test_installer_scrubs_pyinstaller_env_before_relaunch()
     print("ok")
