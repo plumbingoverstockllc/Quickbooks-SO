@@ -1,6 +1,6 @@
 {
-  "sha256": "43a02c727db3efa637d1e935f1ea65d07adbbcd86e55fe3263e8704280d02690",
-  "version": "1.066",
-  "notes": "Fix update helper so Setup actually runs; log every update command and every file Inno replaces into app.log/update.log.",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.066/QB-Sales-Order-Converter-Setup.exe"
+  "version": "1.067",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.067/QB-Sales-Order-Converter-Setup.exe",
+  "sha256": "e31f6967b07951cc7d498f73ef883b1d6001da5abd462aceab0631d6f2459d1b",
+  "notes": "Fix Estimate upload (no ShipMethodRef on EstimateAdd); type-to-search brand/vendor match dropdowns."
 }
