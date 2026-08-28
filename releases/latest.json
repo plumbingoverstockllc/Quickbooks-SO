@@ -1,6 +1,6 @@
 {
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.064/QB-Sales-Order-Converter-Setup.exe",
-  "version": "1.064",
-  "notes": "Fix in-app update relaunch, Pull Vendors on main screen, include QuickBooks vendors in brand match, and log every update step.",
-  "sha256": "c6f384d71c41a904e55aac1ca59b8e80f0208acb8163adc8bccbce2fc77ac11e"
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.065/QB-Sales-Order-Converter-Setup.exe",
+  "version": "1.065",
+  "notes": "Fix PyInstaller relaunch security error; matching a brand to a QuickBooks vendor uses the note multiplier (e.g. Phylrich 0.45).",
+  "sha256": "c2103a5b9b8954404ecb94c8f1d81ec2865d39ca9b8fd7c4e5ad1291d93d1a08"
 }
