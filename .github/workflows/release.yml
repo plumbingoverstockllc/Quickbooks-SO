@@ -75,12 +75,13 @@ jobs:
           $url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
 
           if ($isBeta) {
-            $summary = "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once."
+            $summary = "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once; dialogs say Estimate when you are building an estimate."
             $body = @(
               "Beta v$ver — test build. Install it from Help -> Check for Beta Update.",
               "",
               "- An upload whose customer is not in the QuickBooks Customer list now stops and says so, instead of creating the customer. This prevents near-duplicate customer records from typos and spelling differences.",
               "- Vendor pickers list each QuickBooks vendor once, under its list name. The vendor's Company Name is no longer offered as a second, near-identical choice.",
+              "- The upload window, the row editor and the missing-field warning now say Estimate when the document type is Estimate, instead of always saying SO / Sales Order.",
               "",
               "SHA256: $sha"
             ) -join "`n"

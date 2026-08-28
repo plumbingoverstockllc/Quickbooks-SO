@@ -1,6 +1,9 @@
 """Linux-safe tests for Estimate vs Sales Order export mapping."""
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pandas as pd
 
 from transformer import (
@@ -51,9 +54,29 @@ def test_suggest_vendor_hansgrohe():
     assert suggest_vendor("Hans Grohe", known) == "Hansgrohe"
 
 
+def test_no_dialog_hardcodes_sales_order_wording():
+    """Dialogs kept saying "SO #1245" and "Sales Order Uploaded" while the
+    user was building an estimate. Window titles and headings must come from
+    the document_* helpers, not from a literal."""
+    src = Path(__file__).with_name("app.py").read_text(encoding="utf-8")
+    offenders = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        text = node.value
+        # In an f-string the literal part arrives on its own, so "SO #1245"
+        # is seen here as "SO #" and "SO {number}" as "SO ".
+        if text.startswith("SO #") or text == "SO ":
+            offenders.append((node.lineno, text))
+        elif text.strip() in ("Sales Order Uploaded", "Sales Order Upload"):
+            offenders.append((node.lineno, text))
+    assert not offenders, f"hardcoded sales-order wording in app.py: {offenders}"
+
+
 if __name__ == "__main__":
     test_estimate_labels()
     test_sales_order_labels()
     test_saasant_export_renames_estimate_headers()
     test_suggest_vendor_hansgrohe()
+    test_no_dialog_hardcodes_sales_order_wording()
     print("ok")

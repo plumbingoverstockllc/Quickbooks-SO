@@ -57,7 +57,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.072b"
+APP_VERSION = "v1.073b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -576,7 +576,14 @@ class PricingRulesDialog(tk.Toplevel):
 
 
 class RowEditorDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, source_row: dict, output_row: dict, excel_line_number: int) -> None:
+    def __init__(
+        self,
+        parent: tk.Tk,
+        source_row: dict,
+        output_row: dict,
+        excel_line_number: int,
+        document_type: str = DOCUMENT_SALES_ORDER,
+    ) -> None:
         super().__init__(parent)
         self.title(f"Edit Row (Excel Line {excel_line_number})")
         self.geometry("880x640")
@@ -594,7 +601,8 @@ class RowEditorDialog(tk.Toplevel):
         ttk.Label(
             header_box,
             text=(
-                f"SO {output_row.get('Sales Order No', '') or '—'}  ·  "
+                f"{document_noun_title(document_type)} "
+                f"{output_row.get('Sales Order No', '') or '—'}  ·  "
                 f"Customer: {output_row.get('Customer', '') or '—'}"
             ),
             style="SubHeader.TLabel",
@@ -2045,7 +2053,7 @@ class SalesOrderApp:
         """
         c = UI
         dlg = tk.Toplevel(self.root)
-        dlg.title("Sales Order Uploaded")
+        dlg.title(f"{document_noun_title(self._document_type())} Uploaded")
         dlg.configure(bg=c["bg_window"])
         dlg.geometry("640x460")
         try:
@@ -4261,7 +4269,13 @@ Write-UpdateLog 'helper done'
         source_row_data = self.source_df.loc[source_row_index].to_dict()
         output_row_index = int(self.source_df.index.get_loc(source_row_index))
         output_row_data = self.output_df.loc[output_row_index].to_dict()
-        dlg = RowEditorDialog(self.root, source_row_data, output_row_data, int(source_row_index) + 2)
+        dlg = RowEditorDialog(
+            self.root,
+            source_row_data,
+            output_row_data,
+            int(source_row_index) + 2,
+            document_type=self._document_type(),
+        )
         self.root.wait_window(dlg)
         if dlg.result is None:
             return
@@ -4279,11 +4293,12 @@ Write-UpdateLog 'helper done'
             )
 
     def _validate_settings(self):
+        dtype = self._document_type()
         required = {
             "Source File": self.source_path_var.get().strip(),
             "Customer": self.customer_var.get().strip(),
-            "Sales Order No": self.sales_order_no_var.get().strip(),
-            "Sales Order Date": self.sales_order_date_var.get().strip(),
+            document_number_label(dtype): self.sales_order_no_var.get().strip(),
+            document_date_label(dtype): self.sales_order_date_var.get().strip(),
             "Due Date": self.due_date_var.get().strip(),
         }
         missing = [k for k, v in required.items() if not v]
@@ -5052,7 +5067,8 @@ Write-UpdateLog 'helper done'
         header.pack(fill="x")
 
         sub_text = (
-            f"SO #{upload_kwargs.get('sales_order_no', '?')}  ·  "
+            f"{document_noun_title(self._document_type())} "
+            f"#{upload_kwargs.get('sales_order_no', '?')}  ·  "
             f"{upload_kwargs.get('customer_name', '')}"
         )
         subheader = tk.Label(
