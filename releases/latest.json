@@ -1,6 +1,6 @@
 {
-  "version": "1.071",
-  "sha256": "61e3f12ce3a04a69dbf103469171c9e39c5263934e6fe8355aaf9537caed2c7d",
-  "notes": "Setup clears inherited PyInstaller environment variables so the post-update relaunch no longer hits the bootloader security check.",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.071/QB-Sales-Order-Converter-Setup.exe"
+  "version": "1.073",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.073/QB-Sales-Order-Converter-Setup.exe",
+  "notes": "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once; dialogs say Estimate when you are building an estimate.",
+  "sha256": "f8257bc8278fcd816dbccf6eb2a373503c2068f4719ade96f131eb5eb5ff0e42"
 }
