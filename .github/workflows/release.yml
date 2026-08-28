@@ -70,9 +70,9 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Create missing QuickBooks customers before Estimate/SO upload (fixes 3140 CustomerRef)
-          - Real type-to-search vendor match (Entry + filtered list; Combobox was not typable)
-          - Shimira Labs logo in the sidebar instead of plain text
+          - Update helper now launches PowerShell directly (no cmd.exe), ending the quoting bugs behind "Windows cannot find" errors
+          - The app refuses to close until the helper confirms it started, and opens the installer itself if it did not
+          - Fetch Next pulls the next Estimate number when Estimate is selected (estimates are numbered separately from sales orders)
 
           SHA256: $sha
           "@
@@ -81,7 +81,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Auto-create missing QB customers (3140 fix); typable vendor search; Shimira Labs logo."
+            notes = "Update helper launches PowerShell directly with a start handshake; Fetch Next uses the Estimate number sequence."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force

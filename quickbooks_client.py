@@ -592,7 +592,24 @@ class QuickBooksClient:
         finally:
             self.close()
 
-    def _query_ref_numbers(self) -> List[str]:
+    def _query_ref_numbers(
+        self,
+        document_type: str = "sales_order",
+        *,
+        use_min_floor: bool = True,
+    ) -> List[str]:
+        """RefNumbers for every Sales Order (or Estimate) in the company file.
+
+        Estimates have their own numbering sequence in QuickBooks, so "next
+        number" for an estimate must come from EstimateQuery — reading the
+        Sales Order sequence would hand back a number already used by a
+        different transaction type.
+        """
+        is_estimate = (document_type or "sales_order") == "estimate"
+        query_rq_tag = "EstimateQueryRq" if is_estimate else "SalesOrderQueryRq"
+        query_rs_tag = "EstimateQueryRs" if is_estimate else "SalesOrderQueryRs"
+        ret_tag = "EstimateRet" if is_estimate else "SalesOrderRet"
+
         ref_numbers: List[str] = []
         iterator = "Start"
         iterator_id = ""
@@ -611,30 +628,36 @@ class QuickBooksClient:
             # with iterator="Continue", QB rejects re-specified filters.
             filter_xml = (
                 f"<RefNumberRangeFilter><FromRefNumber>{MIN_SALES_ORDER_NUMBER}</FromRefNumber></RefNumberRangeFilter>"
-                if iterator == "Start"
+                if iterator == "Start" and use_min_floor
                 else ""
             )
             query_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
-    <SalesOrderQueryRq{iterator_attr}{iterator_id_attr}>
+    <{query_rq_tag}{iterator_attr}{iterator_id_attr}>
       <MaxReturned>1000</MaxReturned>
       {filter_xml}
       <IncludeRetElement>RefNumber</IncludeRetElement>
-    </SalesOrderQueryRq>
+    </{query_rq_tag}>
   </QBXMLMsgsRq>
 </QBXML>"""
             page += 1
-            log.debug("_query_ref_numbers: requesting page %d (so far %d refs)", page, len(ref_numbers))
+            log.debug(
+                "_query_ref_numbers(%s): requesting page %d (so far %d refs, floor=%s)",
+                document_type,
+                page,
+                len(ref_numbers),
+                MIN_SALES_ORDER_NUMBER if use_min_floor else "none",
+            )
             response = self._process(query_xml)
             root = ET.fromstring(response)
 
-            for ref in root.findall(".//SalesOrderRet/RefNumber"):
+            for ref in root.findall(f".//{ret_tag}/RefNumber"):
                 if ref.text:
                     ref_numbers.append(ref.text.strip())
 
-            query_rs = root.find(".//SalesOrderQueryRs")
+            query_rs = root.find(f".//{query_rs_tag}")
             if query_rs is None:
                 log.debug("_query_ref_numbers: no QueryRs element on page %d; stopping", page)
                 break
@@ -653,26 +676,58 @@ class QuickBooksClient:
                 log.debug("_query_ref_numbers: missing iteratorID on page %d; stopping", page)
                 break
 
-        log.info("_query_ref_numbers: completed, %d refs across %d page(s)", len(ref_numbers), page)
+        log.info(
+            "_query_ref_numbers(%s): completed, %d refs across %d page(s)",
+            document_type,
+            len(ref_numbers),
+            page,
+        )
         return ref_numbers
 
-    def get_next_sales_order_number(self) -> str:
+    def get_next_document_number(self, document_type: str = "sales_order") -> str:
+        """Next unused RefNumber for the given transaction type.
+
+        Estimates are numbered independently of Sales Orders, so the caller
+        must say which sequence it wants.
+        """
+        is_estimate = (document_type or "sales_order") == "estimate"
         self.connect()
         try:
-            refs = self._query_ref_numbers()
-            numeric_values = []
-            for ref in refs:
-                if re.fullmatch(r"\d+", ref):
-                    numeric_values.append(int(ref))
-            # _query_ref_numbers is filtered to RefNumber >= MIN_SALES_ORDER_NUMBER,
-            # so when nothing matches we start the count there rather than at 1.
+            refs = self._query_ref_numbers(document_type)
+            numeric_values = [int(r) for r in refs if re.fullmatch(r"\d+", r)]
+            # The query is filtered to RefNumber >= MIN_SALES_ORDER_NUMBER to skip
+            # the historical tail. That floor was chosen for Sales Orders; if an
+            # estimate sequence sits entirely below it we would otherwise invent a
+            # number ~168250. Re-query unfiltered before falling back.
+            if not numeric_values and is_estimate:
+                log.info(
+                    "get_next_document_number: no estimates >= %s — re-querying without floor",
+                    MIN_SALES_ORDER_NUMBER,
+                )
+                refs = self._query_ref_numbers(document_type, use_min_floor=False)
+                numeric_values = [int(r) for r in refs if re.fullmatch(r"\d+", r)]
+                if numeric_values:
+                    nxt = str(max(numeric_values) + 1)
+                    log.info("get_next_document_number(estimate): next=%s (unfiltered)", nxt)
+                    return nxt
+
             min_floor = int(MIN_SALES_ORDER_NUMBER)
             if not numeric_values:
                 return str(min_floor)
             highest = max(numeric_values)
-            return str(max(highest, min_floor - 1) + 1)
+            nxt = str(max(highest, min_floor - 1) + 1)
+            log.info(
+                "get_next_document_number(%s): highest=%s next=%s",
+                document_type,
+                highest,
+                nxt,
+            )
+            return nxt
         finally:
             self.close()
+
+    def get_next_sales_order_number(self) -> str:
+        return self.get_next_document_number("sales_order")
 
     def _ensure_customer_exists(self, customer_name: str) -> str:
         """Return the QuickBooks customer FullName, creating the customer if needed.

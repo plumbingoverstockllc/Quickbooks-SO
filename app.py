@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.069"
+APP_VERSION = "v1.070"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -108,6 +108,53 @@ def _env_without_pyinstaller_state() -> dict[str, str]:
     }
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     return env
+
+
+# --- Update helper launch --------------------------------------------------
+# Every in-app update failure from v1.064 through v1.068 came from the launcher
+# plumbing rather than the installer itself:
+#   v1.064  taskkill /T killed Setup as a child of this process
+#   v1.066  DETACHED_PROCESS | CREATE_NO_WINDOW is an illegal flag combination,
+#           so the helper never started
+#   v1.068  `cmd /c start DMQuotesUpdate ...` treated the window title as the
+#           program name
+#   v1.069  subprocess escaped the embedded quotes of `start "" /min ...` into
+#           `start \"\"`, so cmd tried to run a program literally named \
+# The common thread is layered shell quoting. There is no shell here anymore:
+# PowerShell is launched directly from an argv list, so no string is ever
+# re-parsed by cmd.exe.
+
+# DETACHED_PROCESS lets the helper outlive this process. It must NOT be
+# combined with CREATE_NO_WINDOW; -WindowStyle Hidden keeps PowerShell quiet.
+UPDATE_HELPER_CREATIONFLAGS = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+
+
+def _powershell_exe() -> str:
+    """Absolute path to Windows PowerShell, falling back to bare name."""
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    candidate = Path(system_root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    if candidate.exists():
+        return str(candidate)
+    return "powershell.exe"
+
+
+def _update_helper_argv(helper_ps1: Path | str) -> list[str]:
+    """argv that runs the update helper script with no intermediate shell.
+
+    Each element is passed to CreateProcess as its own argument, so paths with
+    spaces need no quoting from us and nothing can be re-split by cmd.exe.
+    """
+    return [
+        _powershell_exe(),
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        str(helper_ps1),
+    ]
 
 
 # --- "Time saved" estimate -------------------------------------------------
@@ -2331,18 +2378,19 @@ class SalesOrderApp:
                     log.warning("Update: no sha256 in feed — skipping checksum")
 
                 update_ui("Starting installer… the app will reopen when done.", 100)
-                # IMPORTANT: do NOT combine DETACHED_PROCESS with CREATE_NO_WINDOW
-                # — MSDN forbids it; that combo made the v1.064 helper exit without
-                # running Setup (no helper log lines, then old exe relaunched).
-                #
                 # Flow: PowerShell applicator (outlives this process) runs Setup
                 # with Inno /LOG, appends every Setup line into update.log /
                 # app.log, and only relaunches DMQuotes when Setup exit code is 0.
+                # The helper writes `started_marker` as its very first statement;
+                # this process refuses to exit until that file appears, so a
+                # helper that fails to launch can never strand the user.
                 program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
                 app_exe = Path(program_files) / "DMQuotes" / "DMQuotes.exe"
                 update_log = SETTINGS_DIR / "update.log"
                 inno_log = temp_dir / "inno_setup.log"
                 helper_ps1 = temp_dir / "apply_update.ps1"
+                started_marker = temp_dir / "helper_started.txt"
+                started_marker.unlink(missing_ok=True)
                 SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 
                 def _ps_lit(value: Path | str) -> str:
@@ -2355,7 +2403,11 @@ $updateLog = '{_ps_lit(update_log)}'
 $innoLog = '{_ps_lit(inno_log)}'
 $setup = '{_ps_lit(installer_path)}'
 $appExe = '{_ps_lit(app_exe)}'
+$startedMarker = '{_ps_lit(started_marker)}'
 $fallbackExe = Join-Path $env:ProgramFiles 'DMQuotes\\DMQuotes.exe'
+
+# Launch handshake: DMQuotes waits for this file before closing itself.
+try {{ Set-Content -LiteralPath $startedMarker -Value $PID -Encoding ASCII }} catch {{}}
 
 function Write-UpdateLog([string]$Message) {{
     $line = "{{0:yyyy-MM-dd HH:mm:ss}} [INFO] qb_so_app: Update: {{1}}" -f (Get-Date), $Message
@@ -2488,22 +2540,11 @@ Write-UpdateLog 'helper done'
                 log.info("Update: relaunch target=%s exists=%s", app_exe, app_exe.exists())
 
                 helper_env = _env_without_pyinstaller_state()
-                create_new_process_group = 0x00000200
-                # cmd `start` treats the first quoted token as the *window title*.
-                # Without an explicit title, an unquoted "DMQuotesUpdate" was
-                # interpreted as the *program* → "Windows cannot find
-                # 'DMQuotesUpdate'". Empty title "" is required so /min applies
-                # to powershell.exe (the real command).
-                # Pass one /c string so "" survives CreateProcess quoting.
-                helper_cmd = (
-                    f'start "" /min powershell.exe -NoProfile '
-                    f'-ExecutionPolicy Bypass -File "{helper_ps1}"'
-                )
-                argv = ["cmd.exe", "/c", helper_cmd]
+                argv = _update_helper_argv(helper_ps1)
                 log.info(
-                    "Update: spawning helper argv=%s creationflags=CREATE_NEW_PROCESS_GROUP(0x%x)",
+                    "Update: spawning helper argv=%s creationflags=DETACHED|NEW_GROUP(0x%x)",
                     argv,
-                    create_new_process_group,
+                    UPDATE_HELPER_CREATIONFLAGS,
                 )
                 log.info(
                     "Update: helper env PYINSTALLER_RESET_ENVIRONMENT=%s _PYI_* cleared=%s",
@@ -2512,19 +2553,54 @@ Write-UpdateLog 'helper done'
                 )
                 proc = subprocess.Popen(
                     argv,
-                    creationflags=create_new_process_group,
+                    creationflags=UPDATE_HELPER_CREATIONFLAGS,
                     close_fds=True,
                     env=helper_env,
                     cwd=str(temp_dir),
                 )
+                log.info("Update: helper PID=%s", getattr(proc, "pid", "?"))
+
+                # Wait for the helper's own handshake before closing. Silently
+                # exiting on a helper that never ran is what produced every
+                # "update did nothing / old version came back" report.
+                deadline = time.monotonic() + 20.0
+                while time.monotonic() < deadline:
+                    if started_marker.exists():
+                        break
+                    exit_code = proc.poll()
+                    if exit_code is not None and not started_marker.exists():
+                        log.error(
+                            "Update: helper exited early with code %s before signalling start",
+                            exit_code,
+                        )
+                        break
+                    time.sleep(0.25)
+
+                if not started_marker.exists():
+                    log.error(
+                        "Update: helper never signalled start (marker %s missing) — "
+                        "keeping app open and running Setup directly instead",
+                        started_marker,
+                    )
+                    try:
+                        os.startfile(str(installer_path))  # noqa: S606 - user-initiated update
+                        log.info("Update: launched Setup directly via ShellExecute")
+                        update_ui("Installer opened — follow the prompts to finish.", 100)
+                        self.root.after(0, lambda: (
+                            progress_dialog.winfo_exists() and progress_dialog.destroy()
+                        ))
+                        return
+                    except Exception as exc:
+                        raise RuntimeError(
+                            "The update helper could not be started. The installer was "
+                            f"downloaded to:\n\n{installer_path}\n\nRun it manually to finish "
+                            f"updating. ({exc})"
+                        ) from exc
+
                 log.info(
-                    "Update: helper launcher PID=%s (cmd start → minimized powershell)",
-                    getattr(proc, "pid", "?"),
-                )
-                time.sleep(1.5)
-                log.info(
-                    "Update: closing this process so Setup can replace files "
-                    "(current=%s) — further lines come from the PowerShell helper / Inno /LOG",
+                    "Update: helper confirmed start — closing this process so Setup can "
+                    "replace files (current=%s); further lines come from the PowerShell "
+                    "helper / Inno /LOG",
                     APP_VERSION,
                 )
                 for handler in log.handlers:
@@ -3994,33 +4070,41 @@ Write-UpdateLog 'helper done'
             pass
 
     def fetch_next_so(self):
-        log.info("Fetch Next SO: clicked. company_file_path=%r", self.qb_company_file_var.get().strip())
-        self._set_qb_status("Fetching next SO...", state="pending")
-        self._set_status("Fetching next Sales Order number from QuickBooks (this may take a moment)...")
+        # Estimates are numbered separately from sales orders in QuickBooks,
+        # so ask for the sequence that matches the selected document type.
+        doc_type = self._document_type()
+        noun = document_noun_title(doc_type)
+        log.info(
+            "Fetch Next: clicked. type=%s company_file_path=%r",
+            doc_type,
+            self.qb_company_file_var.get().strip(),
+        )
+        self._set_qb_status(f"Fetching next {noun}...", state="pending")
+        self._set_status(f"Fetching next {noun} number from QuickBooks (this may take a moment)...")
 
         client = self._qb_client()
 
         def worker():
             try:
-                next_no = client.get_next_sales_order_number()
-                log.info("Fetch Next SO: success, next=%s", next_no)
-                self.root.after(0, lambda: self._fetch_next_so_done(next_no))
+                next_no = client.get_next_document_number(doc_type)
+                log.info("Fetch Next: success, type=%s next=%s", doc_type, next_no)
+                self.root.after(0, lambda: self._fetch_next_so_done(next_no, noun))
             except Exception as exc:
-                log.error("Fetch Next SO: failed — %s", exc)
-                log.debug("Fetch Next SO traceback:\n%s", traceback.format_exc())
+                log.error("Fetch Next: failed (type=%s) — %s", doc_type, exc)
+                log.debug("Fetch Next traceback:\n%s", traceback.format_exc())
                 self.root.after(0, lambda e=exc: self._fetch_next_so_failed(e))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _fetch_next_so_done(self, next_no: str) -> None:
+    def _fetch_next_so_done(self, next_no: str, noun: str = "Sales Order") -> None:
         self.sales_order_no_var.set(next_no)
-        self._set_status(f"Fetched next sales order number: {next_no}")
+        self._set_status(f"Fetched next {noun.lower()} number: {next_no}")
         self._set_qb_status("Connected", state="connected")
-        messagebox.showinfo("Success", f"Next Sales Order number: {next_no}")
+        messagebox.showinfo("Success", f"Next {noun} number: {next_no}")
 
     def _fetch_next_so_failed(self, exc: Exception) -> None:
         self._set_qb_status("Connection Failed", state="disconnected")
-        self._set_status("Fetch Next SO failed. See the Log menu for details.")
+        self._set_status("Fetch Next failed. See the Log menu for details.")
         messagebox.showerror(
             "QuickBooks Error",
             f"{exc}\n\nSee the Log menu for details (file: {LOG_PATH}).",
