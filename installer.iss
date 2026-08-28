@@ -1,5 +1,5 @@
 #define MyAppName "DMQuotes"
-#define MyAppVersion "1.063"
+#define MyAppVersion "1.064"
 #define MyAppPublisher "Moshe Adelman / Shimiralabs"
 #define MyAppExeName "DMQuotes.exe"
 
@@ -49,12 +49,12 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
-  { Kill any running instance (including a hung or crashed one) before copying
-    files. /F forces termination; /T also kills child processes that PyInstaller
-    spawned from the temp _MEIxxxx folder. Failures are ignored — there's
-    nothing to kill in a fresh install. }
+  { Kill only DMQuotes.exe — do NOT use taskkill /T. The in-app updater often
+    launches this Setup.exe as a child of DMQuotes (especially when the app is
+    already elevated to match QuickBooks). /T would kill the whole process tree
+    including Setup itself, so the install never finishes and never relaunches. }
   Exec(ExpandConstant('{sys}\taskkill.exe'),
-       '/F /IM "{#MyAppExeName}" /T',
+       '/F /IM "{#MyAppExeName}"',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(600);
   Result := '';

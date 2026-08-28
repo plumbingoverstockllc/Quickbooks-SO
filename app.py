@@ -55,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.063"
+APP_VERSION = "v1.064"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -1794,11 +1794,12 @@ class SalesOrderApp:
         """Manually-triggered beta update check. Offers the beta even when
         its version is lower than the current installed build, so users can
         roll forward to a beta from a stable in the same line."""
+        log.info("Update: beta check started (current=%s)", APP_VERSION)
         self._set_status("Checking for beta update...")
         try:
             info = self._fetch_beta_release_info()
         except Exception as exc:
-            log.exception("Beta update check failed")
+            log.exception("Update: beta check failed")
             messagebox.showerror("Beta Update Check Failed", str(exc))
             self._set_status("Beta update check failed.")
             return
@@ -1806,6 +1807,12 @@ class SalesOrderApp:
         download_url = info["url"]
         sha256_hash = info["sha256"]
         notes = info["notes"]
+        log.info(
+            "Update: beta feed returned version=%s url=%s sha256=%s",
+            latest_version,
+            download_url,
+            (sha256_hash[:12] + "…") if sha256_hash else "(none)",
+        )
         if not latest_version or not download_url:
             messagebox.showerror(
                 "Beta Update Check Failed",
@@ -1818,12 +1825,18 @@ class SalesOrderApp:
         except Exception:
             current, available = (0, 0, 0, 0), (0, 0, 0, 0)
         if available == current:
+            log.info("Update: already on beta v%s", latest_version)
             messagebox.showinfo(
                 "Beta Update",
                 f"You're already on v{latest_version}.",
             )
             return
         if available < current:
+            log.info(
+                "Update: current %s is newer than beta v%s — nothing to install",
+                APP_VERSION,
+                latest_version,
+            )
             messagebox.showinfo(
                 "Beta Update",
                 f"You're on {APP_VERSION}, which is already newer than the "
@@ -1831,16 +1844,29 @@ class SalesOrderApp:
             )
             return
         if not self._show_update_dialog(latest_version, notes, is_beta=True):
+            log.info("Update: user declined beta v%s", latest_version)
             return
+        log.info("Update: user accepted beta v%s — starting download", latest_version)
         self._download_and_run_update(download_url, sha256_hash)
 
     def check_for_updates(self, silent: bool = False) -> None:
+        log.info(
+            "Update: check started (current=%s silent=%s)",
+            APP_VERSION,
+            silent,
+        )
         try:
             info = self._fetch_release_info()
             latest_version = info["version"]
             download_url = info["url"]
             sha256_hash = info["sha256"]
             notes = info["notes"]
+            log.info(
+                "Update: feed returned version=%s url=%s sha256=%s",
+                latest_version,
+                download_url,
+                (sha256_hash[:12] + "…") if sha256_hash else "(none)",
+            )
 
             if not latest_version or not download_url:
                 raise RuntimeError("Update feed is missing version or url.")
@@ -1848,6 +1874,11 @@ class SalesOrderApp:
             current_version = self._version_tuple(APP_VERSION)
             available_version = self._version_tuple(latest_version)
             if available_version <= current_version:
+                log.info(
+                    "Update: up to date (current=%s available=v%s)",
+                    APP_VERSION,
+                    latest_version,
+                )
                 if not silent:
                     messagebox.showinfo("No Updates", f"You're up to date on {APP_VERSION}.")
                 self._set_status(f"Update check complete: {APP_VERSION} is current.")
@@ -1858,6 +1889,7 @@ class SalesOrderApp:
             # check (Help menu) always shows. A genuinely newer version than
             # the one snoozed will still prompt.
             if silent and latest_version == getattr(self, "_snoozed_update_version", None):
+                log.info("Update: v%s available but snoozed this session", latest_version)
                 self._set_status(f"Update available ({latest_version}); reminder snoozed.")
                 return
 
@@ -1870,11 +1902,14 @@ class SalesOrderApp:
                 # Remember the decline so the hourly check doesn't keep
                 # popping the same version.
                 self._snoozed_update_version = latest_version
+                log.info("Update: user declined v%s (snoozed)", latest_version)
                 self._set_status(f"Update {latest_version} available — install later from the Help menu.")
                 return
 
+            log.info("Update: user accepted v%s — starting download", latest_version)
             self._download_and_run_update(download_url, sha256_hash)
         except Exception as exc:
+            log.exception("Update: check failed")
             if not silent:
                 messagebox.showerror("Update Check Failed", str(exc))
             self._set_status("Update check failed. Use 'Check for Updates' to retry.")
@@ -2152,6 +2187,7 @@ class SalesOrderApp:
         temp_dir.mkdir(parents=True, exist_ok=True)
         filename = Path(urllib.parse.urlparse(url).path).name or "QB-Sales-Order-Converter-Setup.exe"
         installer_path = temp_dir / filename
+        log.info("Update: prepare download dir=%s installer=%s", temp_dir, installer_path)
         progress_dialog = tk.Toplevel(self.root)
         progress_dialog.title("Installing Update")
         progress_dialog.geometry("460x170")
@@ -2186,6 +2222,7 @@ class SalesOrderApp:
 
         def fail_ui(message: str) -> None:
             def _apply():
+                log.error("Update: failed — %s", message)
                 if progress_dialog.winfo_exists():
                     progress_dialog.destroy()
                 messagebox.showerror("Update Failed", message)
@@ -2194,10 +2231,16 @@ class SalesOrderApp:
 
         def worker() -> None:
             try:
+                log.info("Update: downloading from %s", url)
                 update_ui("Downloading update...", 2)
                 with urllib.request.urlopen(url, timeout=30) as response, installer_path.open("wb") as out_file:
                     total_bytes = int(response.headers.get("Content-Length", "0") or "0")
+                    log.info(
+                        "Update: download started (Content-Length=%s)",
+                        total_bytes if total_bytes else "unknown",
+                    )
                     downloaded = 0
+                    last_logged_pct = -10
                     while True:
                         chunk = response.read(1024 * 256)
                         if not chunk:
@@ -2207,19 +2250,114 @@ class SalesOrderApp:
                         if total_bytes > 0:
                             pct = 2 + (downloaded / total_bytes) * 78
                             update_ui(pct=pct)
+                            if int(pct) >= last_logged_pct + 10:
+                                last_logged_pct = int(pct)
+                                log.info(
+                                    "Update: download progress %d%% (%s / %s bytes)",
+                                    int(pct),
+                                    downloaded,
+                                    total_bytes,
+                                )
 
+                log.info(
+                    "Update: download finished (%s bytes) → verifying checksum",
+                    installer_path.stat().st_size if installer_path.exists() else "missing",
+                )
                 update_ui("Verifying update package...", 84)
                 if expected_sha256:
                     digest = hashlib.sha256(installer_path.read_bytes()).hexdigest().lower()
+                    log.info(
+                        "Update: sha256 actual=%s expected=%s",
+                        digest,
+                        expected_sha256,
+                    )
                     if digest != expected_sha256:
                         raise RuntimeError("Downloaded update failed checksum validation.")
+                    log.info("Update: checksum OK")
+                else:
+                    log.warning("Update: no sha256 in feed — skipping checksum")
 
-                update_ui("Installing update... installer progress will stay visible.", 100)
-                subprocess.Popen(
-                    [str(installer_path), "/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS"]
+                update_ui("Starting installer… the app will reopen when done.", 100)
+                # Detach the updater from this process tree. If Setup runs as a
+                # child of (often elevated) DMQuotes.exe, PrepareToInstall /
+                # FORCECLOSEAPPLICATIONS can wipe the installer out with the
+                # app and nothing ever relaunches. A breakaway helper waits for
+                # Setup, then starts the new exe itself (Inno [Run] is backup).
+                program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+                app_exe = Path(program_files) / "DMQuotes" / "DMQuotes.exe"
+                helper_path = temp_dir / "apply_update.cmd"
+                # Helper keeps writing to the same app.log after this process
+                # exits, so Support can see installer wait + relaunch steps.
+                log_path = str(LOG_PATH)
+                helper_lines = [
+                    "@echo off",
+                    "setlocal EnableDelayedExpansion",
+                    f'set "DMQ_LOG={log_path}"',
+                    (
+                        f'echo %date% %time% [INFO] qb_so_app: Update: helper started '
+                        f'(installer={installer_path})>>"%DMQ_LOG%"'
+                    ),
+                    (
+                        'echo %date% %time% [INFO] qb_so_app: Update: launching Setup.exe '
+                        '/VERYSILENT>>"%DMQ_LOG%"'
+                    ),
+                    f'start /wait "" "{installer_path}" /VERYSILENT /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS',
+                    'set "SETUP_EXIT=!ERRORLEVEL!"',
+                    'echo %date% %time% [INFO] qb_so_app: Update: Setup.exe finished exit=!SETUP_EXIT!>>"%DMQ_LOG%"',
+                    "timeout /t 1 /nobreak >nul",
+                    f'if exist "{app_exe}" (',
+                    f'  echo %date% %time% [INFO] qb_so_app: Update: relaunching "{app_exe}">>"%DMQ_LOG%"',
+                    f'  start "" "{app_exe}"',
+                    ") else (",
+                    (
+                        '  echo %date% %time% [INFO] qb_so_app: Update: relaunching '
+                        'default %ProgramFiles%\\DMQuotes\\DMQuotes.exe>>"%DMQ_LOG%"'
+                    ),
+                    r'  start "" "%ProgramFiles%\DMQuotes\DMQuotes.exe"',
+                    ")",
+                    'echo %date% %time% [INFO] qb_so_app: Update: helper done>>"%DMQ_LOG%"',
+                    'del "%~f0" >nul 2>&1',
+                    "",
+                ]
+                helper_path.write_text("\r\n".join(helper_lines), encoding="utf-8")
+                log.info(
+                    "Update: wrote helper %s; launching detached (relaunch target=%s)",
+                    helper_path,
+                    app_exe,
                 )
-                self.root.after(500, self.root.destroy)
+                detached = (
+                    getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                    | 0x08000000  # CREATE_NO_WINDOW
+                )
+                breakaway = detached | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
+                try:
+                    proc = subprocess.Popen(
+                        ["cmd.exe", "/c", str(helper_path)],
+                        creationflags=breakaway,
+                        close_fds=True,
+                    )
+                    log.info("Update: helper PID=%s (breakaway)", getattr(proc, "pid", "?"))
+                except OSError:
+                    proc = subprocess.Popen(
+                        ["cmd.exe", "/c", str(helper_path)],
+                        creationflags=detached,
+                        close_fds=True,
+                    )
+                    log.info("Update: helper PID=%s (detached fallback)", getattr(proc, "pid", "?"))
+                log.info(
+                    "Update: closing this process so Setup can replace files "
+                    "(current=%s)",
+                    APP_VERSION,
+                )
+                for handler in log.handlers:
+                    try:
+                        handler.flush()
+                    except Exception:
+                        pass
+                self.root.after(800, self.root.destroy)
             except Exception as exc:
+                log.exception("Update: worker failed")
                 fail_ui(str(exc))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -2513,9 +2651,7 @@ class SalesOrderApp:
         self._form_entry(form, "Default Income Account", self.income_account_var, 7, 10, 6, min_chars=18)
         self._form_entry(form, "Sales Tax Item", self.sales_tax_item_var, 8, 0, 6, min_chars=12)
 
-        # Bottom bar of the Configuration card — now just the QB status pill,
-        # since Connect/Admin Setup/Update commands moved to the Setup and
-        # Help menus in v1.013b.
+        # Bottom bar of the Configuration card — QB status + vendor pull.
         qb_bar = ttk.Frame(config_left, style="Card.TFrame")
         qb_bar.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.qb_status_pill = tk.Frame(
@@ -2537,6 +2673,12 @@ class SalesOrderApp:
         )
         self.qb_status_inner.pack()
         self.qb_status_label = self.qb_status_inner
+        ttk.Button(
+            qb_bar,
+            text="Pull Vendors from QuickBooks",
+            command=self.pull_quickbooks_vendors,
+            style="Accent.TButton",
+        ).pack(side="left", padx=(10, 0))
 
         # v1.039 action row: each primary action gets its own "STEP N" badge
         # stacked above the button so the workflow reads top-to-bottom even
@@ -3058,13 +3200,24 @@ class SalesOrderApp:
         return value if value in (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE) else DOCUMENT_SALES_ORDER
 
     def _qb_vendor_names(self) -> list[str]:
-        names = []
+        """Active QuickBooks vendor list names + company names.
+
+        QB often stores the list name as e.g. "Deluxe Vanity (ACH)" while
+        Company Name is "Deluxe Vanity". Offer both so either spelling can
+        be chosen in Match / Brand Pricing dialogs.
+        """
+        names: list[str] = []
+        seen: set[str] = set()
         for row in self.quickbooks_vendors:
             if not isinstance(row, dict):
                 continue
-            name = str(row.get("name") or "").strip()
-            if name and row.get("isActive", True):
-                names.append(name)
+            if not row.get("isActive", True):
+                continue
+            for key in ("name", "companyName"):
+                value = str(row.get(key) or "").strip()
+                if value and value not in seen:
+                    seen.add(value)
+                    names.append(value)
         return names
 
     def _all_known_vendor_names(self) -> list[str]:
@@ -3176,6 +3329,7 @@ class SalesOrderApp:
         scroll.pack(side="right", fill="y", pady=8)
 
         match_options = [""] + known
+        match_combos: list[ttk.Combobox] = []
         brand_vars: dict[str, tk.StringVar] = {}
         for brand in unmatched_brands:
             suggestion = suggest_vendor(brand, known) or ""
@@ -3186,6 +3340,7 @@ class SalesOrderApp:
             ttk.Label(row, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
             combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
             combo.pack(fill="x", pady=(2, 0))
+            match_combos.append(combo)
 
         line_vars: dict[int, tk.StringVar] = {}
         for excel_line, sku in blank_rows:
@@ -3201,6 +3356,15 @@ class SalesOrderApp:
             ).pack(anchor="w")
             combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
             combo.pack(fill="x", pady=(2, 0))
+            match_combos.append(combo)
+
+        def refresh_match_options() -> None:
+            options = [""] + self._all_known_vendor_names()
+            for combo in match_combos:
+                try:
+                    combo.configure(values=options)
+                except tk.TclError:
+                    pass
 
         def save() -> None:
             for brand, var in brand_vars.items():
@@ -3232,6 +3396,14 @@ class SalesOrderApp:
             outcome["cancelled"] = False
             dlg.destroy()
 
+        ttk.Button(
+            button_row,
+            text="Pull Vendors from QuickBooks",
+            command=lambda: self.pull_quickbooks_vendors(
+                on_done=refresh_match_options, parent=dlg
+            ),
+            style="Accent.TButton",
+        ).pack(side="left")
         ttk.Button(button_row, text="Save matches", command=save, style="Primary.TButton").pack(side="right")
         ttk.Button(button_row, text="Cancel", command=dlg.destroy, style="Quiet.TButton").pack(
             side="right", padx=(0, 8)
@@ -3239,38 +3411,48 @@ class SalesOrderApp:
         dlg.wait_window()
         return outcome["cancelled"]
 
-    def pull_quickbooks_vendors(self) -> None:
+    def pull_quickbooks_vendors(self, on_done=None, parent=None) -> None:
         self._set_status("Pulling vendors from QuickBooks...")
         self._set_qb_status("Pulling vendors...", state="pending")
 
         def worker() -> None:
             try:
                 vendors = self._qb_client().query_vendors(include_inactive=True)
-                self.root.after(0, lambda: self._pull_vendors_done(vendors))
+                self.root.after(
+                    0,
+                    lambda: self._pull_vendors_done(vendors, on_done=on_done, parent=parent),
+                )
             except Exception as exc:
                 log.exception("pull_quickbooks_vendors failed")
-                self.root.after(0, lambda e=exc: self._pull_vendors_failed(e))
+                self.root.after(
+                    0, lambda e=exc: self._pull_vendors_failed(e, parent=parent)
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _pull_vendors_done(self, vendors: list[dict]) -> None:
+    def _pull_vendors_done(self, vendors: list[dict], on_done=None, parent=None) -> None:
         self.quickbooks_vendors = vendors
         self._persist_settings()
         active = sum(1 for row in vendors if row.get("isActive", True))
         self._set_qb_status("Connected", state="connected")
         self._set_status(f"Pulled {active} active vendor name(s) from QuickBooks.")
+        if on_done is not None:
+            try:
+                on_done()
+            except Exception:
+                log.exception("pull_quickbooks_vendors on_done callback failed")
         messagebox.showinfo(
             "QuickBooks Vendors",
             f"Saved {len(vendors)} vendor name(s) from QuickBooks "
             f"({active} active).\n\n"
-            "These names are used when matching quote brands. They do not "
-            "replace cost multipliers.",
+            "These names now appear in Match Vendor Names and Brand Pricing.",
+            parent=parent,
         )
 
-    def _pull_vendors_failed(self, exc: Exception) -> None:
+    def _pull_vendors_failed(self, exc: Exception, parent=None) -> None:
         self._set_qb_status("Connection Failed", state="disconnected")
         self._set_status("Pull vendors from QuickBooks failed.")
-        messagebox.showerror("QuickBooks Vendors", str(exc))
+        messagebox.showerror("QuickBooks Vendors", str(exc), parent=parent)
 
     def show_elevation_settings(self) -> None:
         c = UI
@@ -4002,12 +4184,16 @@ class SalesOrderApp:
             anchor="w",
         ).pack(fill="x")
         if self.use_actual_cost:
-            sub = "Enter the actual cost/rate, or match the brand to one already in the system."
+            sub = (
+                "Enter the actual cost/rate, or match the brand to one already in "
+                "the system (price-list brands and vendors pulled from QuickBooks)."
+            )
         else:
             sub = (
                 "Enter the cost multiplier, or match the brand to one already in "
-                "the system if it's the same vendor under a different name. Leave "
-                "\"Variable\" checked to be asked each order; uncheck to lock it."
+                "the system if it's the same vendor under a different name "
+                "(includes vendors pulled from QuickBooks). Leave \"Variable\" "
+                "checked to be asked each order; uncheck to lock it."
             )
         tk.Label(
             body,
@@ -4020,11 +4206,8 @@ class SalesOrderApp:
             justify="left",
         ).pack(fill="x", pady=(3, 10))
 
-        # Sorted list of every brand already known to the app, used as the
-        # "match to existing brand" options.
-        match_options = [""] + sorted(
-            set(self.vendor_clean) | set(self.brand_values) | set(self.vendor_notes)
-        )
+        # Price-list brands + saved rules + QuickBooks vendor names.
+        match_options = [""] + self._all_known_vendor_names()
 
         # Buttons are packed at the BOTTOM first, so the scrollable list can
         # never push them off-screen (the bug where Save wasn't visible).
@@ -4045,6 +4228,7 @@ class SalesOrderApp:
         entry_vars: dict[str, tk.StringVar] = {}
         variable_vars: dict[str, tk.BooleanVar] = {}
         match_vars: dict[str, tk.StringVar] = {}
+        match_combos: list[ttk.Combobox] = []
         for brand in missing_brands:
             note = self.vendor_notes.get(brand)
             is_tiered = bool(note)
@@ -4070,10 +4254,12 @@ class SalesOrderApp:
             ).pack(side="left", padx=(0, 6))
             mvar = tk.StringVar(value="")
             match_vars[brand] = mvar
-            ttk.Combobox(
+            combo = ttk.Combobox(
                 match_row, textvariable=mvar, values=match_options,
                 state="readonly", width=26, font=("Segoe UI", 8),
-            ).pack(side="left")
+            )
+            combo.pack(side="left")
+            match_combos.append(combo)
 
             # Right: multiplier entry + Variable toggle. Tiered brands default
             # to Variable (ask each order); unknown brands default to locked.
@@ -4084,6 +4270,14 @@ class SalesOrderApp:
             variable_vars[brand] = vbar
             ttk.Checkbutton(row, text="Variable", variable=vbar, style="TCheckbutton").pack(side="right")
 
+        def refresh_match_options() -> None:
+            options = [""] + self._all_known_vendor_names()
+            for combo in match_combos:
+                try:
+                    combo.configure(values=options)
+                except tk.TclError:
+                    pass
+
         def cancel():
             outcome["cancelled"] = True
             dlg.destroy()
@@ -4091,14 +4285,26 @@ class SalesOrderApp:
         def save():
             aliases: dict[str, str] = {}
             parsed: dict[str, float] = {}
+            priced = self._effective_brand_values()
             try:
                 for brand in missing_brands:
                     match = match_vars[brand].get().strip()
-                    if match:
-                        # Mapped to an existing brand — inherit its pricing.
-                        aliases[brand] = match
-                        continue
                     text = entry_vars[brand].get().strip()
+                    if match:
+                        aliases[brand] = match
+                        # Inherit pricing when the target already has a rate.
+                        # QB-only names (e.g. Deluxe Vanity) often have no
+                        # multiplier — still require one so Phylrich etc. work.
+                        if match in priced:
+                            continue
+                        if not text:
+                            raise ValueError(
+                                f"{brand}: “{match}” has no saved multiplier — "
+                                "enter one (e.g. 0.45 from the note), or pick a "
+                                "brand that already has pricing."
+                            )
+                        parsed[brand] = float(text)
+                        continue
                     if not text:
                         raise ValueError(
                             f"{brand}: enter a multiplier or pick a brand to match it to."
@@ -4110,11 +4316,13 @@ class SalesOrderApp:
             # Aliases: remember the mapping so this name auto-resolves next time.
             for brand, target in aliases.items():
                 self.brand_aliases[brand] = target
-                self.brand_values.pop(brand, None)
-                self.session_brand_values.pop(brand, None)
+                if brand not in parsed:
+                    self.brand_values.pop(brand, None)
+                    self.session_brand_values.pop(brand, None)
             # Variable -> per-order only; locked -> saved in brand_values.
             for brand, value in parsed.items():
-                self.brand_aliases.pop(brand, None)
+                if brand not in aliases:
+                    self.brand_aliases.pop(brand, None)
                 if variable_vars[brand].get():
                     self.session_brand_values[brand] = value
                     self.brand_values.pop(brand, None)
@@ -4125,6 +4333,14 @@ class SalesOrderApp:
             outcome["cancelled"] = False
             dlg.destroy()
 
+        ttk.Button(
+            button_row,
+            text="Pull Vendors from QuickBooks",
+            command=lambda: self.pull_quickbooks_vendors(
+                on_done=refresh_match_options, parent=dlg
+            ),
+            style="Accent.TButton",
+        ).pack(side="left")
         ttk.Button(button_row, text="Cancel", command=cancel, style="Quiet.TButton").pack(side="right")
         ttk.Button(button_row, text="Save and Continue", command=save, style="Primary.TButton").pack(
             side="right", padx=(0, 8)

@@ -70,10 +70,10 @@ jobs:
           $notes = @"
           v$ver for every installed copy of DMQuotes.
 
-          - Sales Order or Estimate (SaaSant headers, sheet name, and filename)
-          - Match vendor names that did not line up with anyone in the system
-          - Pull vendor names from QuickBooks Desktop
-          - Relaunch elevation setting so the app matches QuickBooks UAC
+          - Fix in-app update: installer no longer kills itself; app relaunches after install
+          - Pull Vendors from QuickBooks button on the main screen and Brand Pricing dialog
+          - Brand match list includes QuickBooks vendors (list name and company name)
+          - Step-by-step update progress written to app.log (including Setup + relaunch)
 
           SHA256: $sha
           "@
@@ -82,7 +82,7 @@ jobs:
             version = $ver
             url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
             sha256 = $sha
-            notes = "Estimate vs Sales Order SaaSant export, Match vendor names, pull QuickBooks vendors, and a QuickBooks elevation relaunch setting."
+            notes = "Fix in-app update relaunch, Pull Vendors on main screen, include QuickBooks vendors in brand match, and log every update step."
           } | ConvertTo-Json
           Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
           Copy-Item releases/latest.json releases/beta.json -Force
