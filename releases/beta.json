@@ -1,6 +1,6 @@
 {
-  "sha256": "258db2c8a779e101175f4239a300883fb9a2cdc66b0294b15bb7dcbcaea0adda",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.072b/QB-Sales-Order-Converter-Setup.exe",
-  "version": "1.072b",
-  "notes": "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once."
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.073b/QB-Sales-Order-Converter-Setup.exe",
+  "notes": "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once; dialogs say Estimate when you are building an estimate.",
+  "sha256": "b0a1c111249226abe84fa945405cb139d91bfb76dfa4b3247897db448eec3f97",
+  "version": "1.073b"
 }
