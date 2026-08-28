@@ -1,6 +1,6 @@
 {
-  "sha256": "fbe1f731be4a4eda0df5ff3e54a6f6dba0532130d6db2d712f9bfaf1adee9b85",
-  "version": "1.063",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.063/QB-Sales-Order-Converter-Setup.exe",
-  "notes": "Estimate vs Sales Order SaaSant export, Match vendor names, pull QuickBooks vendors, and a QuickBooks elevation relaunch setting."
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.064/QB-Sales-Order-Converter-Setup.exe",
+  "version": "1.064",
+  "notes": "Fix in-app update relaunch, Pull Vendors on main screen, include QuickBooks vendors in brand match, and log every update step.",
+  "sha256": "c6f384d71c41a904e55aac1ca59b8e80f0208acb8163adc8bccbce2fc77ac11e"
 }
