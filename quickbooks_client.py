@@ -6,6 +6,8 @@ import logging
 import os
 import re
 import subprocess
+import sys
+import tempfile
 import traceback
 import xml.etree.ElementTree as ET
 from typing import Callable, Iterable, List, Optional
@@ -82,6 +84,68 @@ def _is_process_elevated(pid: int) -> str:
 
 def _current_process_elevation() -> str:
     return _is_process_elevated(os.getpid())
+
+
+def current_process_elevation() -> str:
+    return _current_process_elevation()
+
+
+def quickbooks_ui_elevation() -> str:
+    """Elevation of the first real QuickBooks UI process, or 'unknown'."""
+    for row in _quickbooks_process_details():
+        elevation = row.get("elevation") or "unknown"
+        if elevation in ("elevated", "standard"):
+            return elevation
+    return "unknown"
+
+
+def _relaunch_command() -> tuple[str, str]:
+    """Return (executable, params) for relaunching this process."""
+    if getattr(sys, "frozen", False):
+        exe = sys.executable
+        params = subprocess.list2cmdline(sys.argv[1:])
+        return exe, params
+    exe = sys.executable
+    params = subprocess.list2cmdline(sys.argv)
+    return exe, params
+
+
+def relaunch_as_administrator() -> None:
+    """Relaunch this app elevated via UAC, then exit the current process."""
+    import sys
+
+    exe, params = _relaunch_command()
+    rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+    if rc <= 32:
+        raise RuntimeError(
+            f"Windows refused to relaunch as Administrator (ShellExecute code {rc})."
+        )
+    os._exit(0)
+
+
+def relaunch_as_standard_user() -> None:
+    """Relaunch this app unelevated, then exit the current process.
+
+    An elevated process cannot drop UAC by spawning itself. explorer.exe runs
+    as the logged-on shell user, so asking Explorer to open the exe starts a
+    standard-user instance.
+    """
+    import sys
+
+    exe, params = _relaunch_command()
+    if getattr(sys, "frozen", False) and not params:
+        subprocess.Popen(["explorer.exe", exe], close_fds=True)
+    else:
+        # Write a tiny launcher so Explorer starts the same argv unelevated.
+        launcher = os.path.join(tempfile.gettempdir(), "dmquotes_relaunch.cmd")
+        cmdline = subprocess.list2cmdline([exe] + (
+            sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv
+        ))
+        with open(launcher, "w", encoding="utf-8") as handle:
+            handle.write("@echo off\r\n")
+            handle.write(f"start \"\" {cmdline}\r\n")
+        subprocess.Popen(["explorer.exe", launcher], close_fds=True)
+    os._exit(0)
 
 
 def _quickbooks_process_details() -> list[dict]:
@@ -431,6 +495,69 @@ class QuickBooksClient:
             root = ET.fromstring(response)
             company_name = root.findtext(".//CompanyRet/CompanyName", default="QuickBooks Company")
             return company_name
+        finally:
+            self.close()
+
+    def query_vendors(self, include_inactive: bool = True) -> list[dict]:
+        """Return Vendor list names from the open company file.
+
+        Names only — multipliers stay in vendor_pricing.json / brand_aliases.
+        Used so quote brands that don't match the bundled list can be matched
+        to a vendor that already exists in QuickBooks.
+        """
+        self.connect()
+        try:
+            vendors: list[dict] = []
+            iterator = "Start"
+            iterator_id = ""
+            active = "All" if include_inactive else "ActiveOnly"
+            page = 0
+            while True:
+                iterator_attr = f' iterator="{iterator}"'
+                iterator_id_attr = f' iteratorID="{iterator_id}"' if iterator_id else ""
+                query_xml = f"""<?xml version="1.0"?>
+<?qbxml version="13.0"?>
+<QBXML>
+  <QBXMLMsgsRq onError="stopOnError">
+    <VendorQueryRq{iterator_attr}{iterator_id_attr}>
+      <MaxReturned>1000</MaxReturned>
+      <ActiveStatus>{active}</ActiveStatus>
+      <IncludeRetElement>ListID</IncludeRetElement>
+      <IncludeRetElement>Name</IncludeRetElement>
+      <IncludeRetElement>CompanyName</IncludeRetElement>
+      <IncludeRetElement>IsActive</IncludeRetElement>
+    </VendorQueryRq>
+  </QBXMLMsgsRq>
+</QBXML>"""
+                page += 1
+                log.debug("query_vendors: requesting page %d (so far %d)", page, len(vendors))
+                response = self._process(query_xml)
+                root = ET.fromstring(response)
+                for ret in root.findall(".//VendorRet"):
+                    name = (ret.findtext("Name") or "").strip()
+                    if not name:
+                        continue
+                    is_active_text = (ret.findtext("IsActive") or "true").strip().lower()
+                    vendors.append(
+                        {
+                            "listId": (ret.findtext("ListID") or "").strip(),
+                            "name": name,
+                            "companyName": (ret.findtext("CompanyName") or "").strip(),
+                            "isActive": is_active_text != "false",
+                        }
+                    )
+                query_rs = root.find(".//VendorQueryRs")
+                if query_rs is None:
+                    break
+                remaining = int(query_rs.attrib.get("iteratorRemainingCount", "0"))
+                if remaining <= 0:
+                    break
+                iterator = "Continue"
+                iterator_id = query_rs.attrib.get("iteratorID", "")
+                if not iterator_id:
+                    break
+            log.info("query_vendors: %d vendor(s) across %d page(s)", len(vendors), page)
+            return vendors
         finally:
             self.close()
 
@@ -819,6 +946,7 @@ class QuickBooksClient:
         sales_tax_item: str = "",
         expense_account: str = "",
         progress_cb: Optional[Callable[[str], None]] = None,
+        document_type: str = "sales_order",
     ) -> str:
         # v1.037: progress_cb fires at each meaningful step so the UI can
         # show line-by-line activity in a streaming log. Callback must be
@@ -830,6 +958,16 @@ class QuickBooksClient:
                 progress_cb(msg)
             except Exception:
                 log.exception("upload_sales_order: progress_cb raised; continuing")
+
+        is_estimate = (document_type or "sales_order") == "estimate"
+        txn_noun = "estimate" if is_estimate else "sales order"
+        line_add_tag = "EstimateLineAdd" if is_estimate else "SalesOrderLineAdd"
+        add_rq_tag = "EstimateAddRq" if is_estimate else "SalesOrderAddRq"
+        add_tag = "EstimateAdd" if is_estimate else "SalesOrderAdd"
+        add_rs_tag = "EstimateAddRs" if is_estimate else "SalesOrderAddRs"
+        ret_tag = "EstimateRet" if is_estimate else "SalesOrderRet"
+        line_ret_tag = "EstimateLineRet" if is_estimate else "SalesOrderLineRet"
+        txn_ext_type = "Estimate" if is_estimate else "SalesOrder"
 
         self.last_created_items = []
         _progress("Connecting to QuickBooks...")
@@ -1002,34 +1140,34 @@ class QuickBooksClient:
                     desc = (note + desc).strip()
                     sku = fallback_clean
                 return f"""
-      <SalesOrderLineAdd>
+      <{line_add_tag}>
         <ItemRef><FullName>{sku}</FullName></ItemRef>
         <Desc>{desc}</Desc>
         <Quantity>{row["qty"]}</Quantity>
         <Rate>{row["rate"]}</Rate>
         <SalesTaxCodeRef><FullName>{_clean(tax_code)}</FullName></SalesTaxCodeRef>
-      </SalesOrderLineAdd>"""
+      </{line_add_tag}>"""
 
             def _header_line_xml(label: str) -> str:
                 # Description-only line: no ItemRef, no Quantity, no Rate.
                 # QuickBooks Desktop accepts this for section headers when
                 # only the Desc element is provided.
                 return f"""
-      <SalesOrderLineAdd>
+      <{line_add_tag}>
         <Desc>{_clean(label)}</Desc>
-      </SalesOrderLineAdd>"""
+      </{line_add_tag}>"""
 
             def _blank_line_xml() -> str:
-                return """
-      <SalesOrderLineAdd>
+                return f"""
+      <{line_add_tag}>
         <Desc></Desc>
-      </SalesOrderLineAdd>"""
+      </{line_add_tag}>"""
 
             # Stream each line into the progress log so the user sees what
             # they're shipping to QuickBooks. The actual SalesOrderAdd is a
             # single atomic request below — the per-line callbacks happen as
             # the XML is built, not as QB processes each row.
-            _progress(f"Building sales-order XML for {len(line_rows)} line(s)...")
+            _progress(f"Building {txn_noun} XML for {len(line_rows)} line(s)...")
             for row in line_rows:
                 try:
                     qty = row["qty"]
@@ -1149,11 +1287,11 @@ class QuickBooksClient:
 <?qbxml version="13.0"?>
 <QBXML>
   <QBXMLMsgsRq onError="stopOnError">
-    <SalesOrderAddRq>
-      <SalesOrderAdd>
+    <{add_rq_tag}>
+      <{add_tag}>
         {''.join(parts)}
-      </SalesOrderAdd>
-    </SalesOrderAddRq>
+      </{add_tag}>
+    </{add_rq_tag}>
   </QBXMLMsgsRq>
 </QBXML>"""
 
@@ -1172,13 +1310,13 @@ class QuickBooksClient:
                 )
                 log.error("upload_sales_order: full XML being rejected locally:\n%s", request_xml)
                 raise RuntimeError(
-                    "The sales order XML built from this preview is not valid XML "
+                    "The document XML built from this preview is not valid XML "
                     "before it even reaches QuickBooks. A SKU or description "
                     f"contains characters that broke escaping. Local parse error: {parse_exc}.\n\n"
                     f"Full XML written to the log."
                 )
 
-            _progress(f"Submitting sales order to QuickBooks ({len(line_rows)} line(s))...")
+            _progress(f"Submitting {txn_noun} to QuickBooks ({len(line_rows)} line(s))...")
             try:
                 response = self._process(request_xml)
             except Exception:
@@ -1188,7 +1326,7 @@ class QuickBooksClient:
                 log.error("upload_sales_order: ProcessRequest raised; full XML sent:\n%s", request_xml)
                 raise
             root = ET.fromstring(response)
-            add_rs = root.find(".//SalesOrderAddRs")
+            add_rs = root.find(f".//{add_rs_tag}")
             if add_rs is None:
                 raise RuntimeError("QuickBooks returned an unexpected response.")
             status_code = add_rs.attrib.get("statusCode", "")
@@ -1196,9 +1334,9 @@ class QuickBooksClient:
             if status_code != "0":
                 raise RuntimeError(f"QuickBooks upload failed ({status_code}): {status_message}")
 
-            ref = root.findtext(".//SalesOrderRet/RefNumber", default=sales_order_no)
-            txn_id = root.findtext(".//SalesOrderRet/TxnID", default="")
-            _progress(f"Sales order #{ref} created in QuickBooks.")
+            ref = root.findtext(f".//{ret_tag}/RefNumber", default=sales_order_no)
+            txn_id = root.findtext(f".//{ret_tag}/TxnID", default="")
+            _progress(f"{txn_noun.title()} #{ref} created in QuickBooks.")
 
             # Write per-line notes into the line "NOTES" custom field. The
             # returned SalesOrderLineRet entries are in the same order as the
@@ -1208,7 +1346,7 @@ class QuickBooksClient:
             if txn_id and any(emitted_notes):
                 try:
                     ret_line_ids = [
-                        el.text for el in root.findall(".//SalesOrderRet/SalesOrderLineRet/TxnLineID")
+                        el.text for el in root.findall(f".//{ret_tag}/{line_ret_tag}/TxnLineID")
                     ]
                     pairs = [
                         (lid, note)
@@ -1217,11 +1355,11 @@ class QuickBooksClient:
                     ]
                     if pairs:
                         _progress(f"Adding notes to {len(pairs)} line(s)...")
-                        self._set_line_notes(txn_id, pairs)
+                        self._set_line_notes(txn_id, pairs, txn_ext_type=txn_ext_type)
                 except Exception:
                     log.exception("upload_sales_order: failed setting line notes (non-fatal)")
 
-            return f"Uploaded Sales Order #{ref} (TxnID: {txn_id})"
+            return f"Uploaded {txn_noun.title()} #{ref} (TxnID: {txn_id})"
         finally:
             self.close()
 
@@ -1275,7 +1413,7 @@ class QuickBooksClient:
                 return d["owner"] or "0", d["name"]
         return None, None
 
-    def _set_line_notes(self, txn_id: str, line_notes: list) -> None:
+    def _set_line_notes(self, txn_id: str, line_notes: list, txn_ext_type: str = "SalesOrder") -> None:
         """Set the per-line notes custom field (data extension) on a sales
         order. `line_notes` is a list of (txn_line_id, note). Resolves the
         real field name + OwnerID from QuickBooks first, then writes them in
@@ -1303,7 +1441,7 @@ class QuickBooksClient:
       <DataExtAdd>
         <OwnerID>{_clean(owner)}</OwnerID>
         <DataExtName>{_clean(field)}</DataExtName>
-        <TxnDataExtType>SalesOrder</TxnDataExtType>
+        <TxnDataExtType>{_clean(txn_ext_type)}</TxnDataExtType>
         <TxnID>{_clean(txn_id)}</TxnID>
         <TxnLineID>{_clean(line_id)}</TxnLineID>
         <DataExtValue>{_clean(note)}</DataExtValue>

@@ -8,8 +8,11 @@ Windows desktop app to:
 4. Optional checkbox to use typed `Actual Cost/Rate` instead of MSRP multiplier.
 5. Convert to SaaSant Sales Order template format.
 6. Preview and validate rows before upload.
-7. One-click `Export for SaaSant` to Downloads with a ready-to-upload file name.
-8. Export custom-path `.xlsx` or upload directly to QuickBooks Desktop Enterprise.
+7. Choose Sales Order or Estimate. SaaSant export remaps the number/date headers, sheet name, and filename.
+8. Match quote vendor names that do not line up with anyone in the system, including names pulled from QuickBooks.
+9. One-click `Export for SaaSant` to Downloads with a ready-to-upload file name.
+10. Export custom-path `.xlsx` or upload directly to QuickBooks Desktop Enterprise.
+11. Help → Check for Updates downloads the latest GitHub `Setup.exe` for every installed copy.
 
 ## Files
 

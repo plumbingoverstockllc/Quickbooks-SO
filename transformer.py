@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
+
+DOCUMENT_SALES_ORDER = "sales_order"
+DOCUMENT_ESTIMATE = "estimate"
+DOCUMENT_TYPES = (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE)
 
 TEMPLATE_COLUMNS = [
     "Sales Order No",
@@ -410,3 +415,101 @@ def transform_to_template(
     if output_df.empty:
         errors.append("No valid rows were generated.")
     return output_df, errors
+
+
+def is_document_type(value: object) -> bool:
+    return value in DOCUMENT_TYPES
+
+
+def document_noun(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "estimate"
+    return "sales order"
+
+
+def document_noun_title(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "Estimate"
+    return "Sales Order"
+
+
+def document_number_label(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "Estimate No"
+    return "Sales Order No"
+
+
+def document_date_label(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "Estimate Date"
+    return "Sales Order Date"
+
+
+def saasant_sheet_name(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "Estimate"
+    return "Sales Order"
+
+
+def saasant_filename_prefix(document_type: str) -> str:
+    if document_type == DOCUMENT_ESTIMATE:
+        return "Estimate"
+    return "SalesOrder"
+
+
+def saasant_header_for(document_type: str, internal_column: str) -> str:
+    if internal_column == "Sales Order No":
+        return document_number_label(document_type)
+    if internal_column == "Sales Order Date":
+        return document_date_label(document_type)
+    return internal_column
+
+
+def saasant_export_frame(df: pd.DataFrame, document_type: str) -> pd.DataFrame:
+    """Rename SaaSant header columns for Estimate vs Sales Order.
+
+    Internal preview columns stay as Sales Order No/Date so QuickBooks upload
+    and the rest of the app keep one schema. Only the Excel export remaps.
+    """
+    out = df.copy()
+    rename = {}
+    for col in list(out.columns):
+        mapped = saasant_header_for(document_type, col)
+        if mapped != col:
+            rename[col] = mapped
+    if rename:
+        out = out.rename(columns=rename)
+    return out
+
+
+def normalize_vendor_name(name: str) -> str:
+    text = str(name or "").lower().replace("&", " and ")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def compact_vendor_name(name: str) -> str:
+    return normalize_vendor_name(name).replace(" ", "")
+
+
+def suggest_vendor(source_name: str, known_names: list[str]) -> str | None:
+    needle = compact_vendor_name(source_name)
+    if not needle:
+        return None
+    exact = [name for name in known_names if compact_vendor_name(name) == needle]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return exact[0]
+    contained = [
+        name
+        for name in known_names
+        if needle and (
+            compact_vendor_name(name).find(needle) >= 0
+            or needle.find(compact_vendor_name(name)) >= 0
+        )
+        and compact_vendor_name(name)
+    ]
+    if len(contained) == 1:
+        return contained[0]
+    return None

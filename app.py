@@ -19,15 +19,32 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from quickbooks_client import QuickBooksClient, _current_process_elevation
+from quickbooks_client import (
+    QuickBooksClient,
+    _current_process_elevation,
+    current_process_elevation,
+    quickbooks_ui_elevation,
+    relaunch_as_administrator,
+    relaunch_as_standard_user,
+)
 from transformer import (
     COST_COLUMN,
+    DOCUMENT_ESTIMATE,
+    DOCUMENT_SALES_ORDER,
     NOTES_COLUMN,
     OrderSettings,
     ROOM_COLUMN,
+    document_date_label,
+    document_noun,
+    document_noun_title,
+    document_number_label,
     line_pricing_keys,
     load_source,
     load_vendor_multipliers,
+    saasant_export_frame,
+    saasant_filename_prefix,
+    saasant_sheet_name,
+    suggest_vendor,
     transform_to_template,
     unique_brands,
     unique_skus,
@@ -38,7 +55,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.061"
+APP_VERSION = "v1.063"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -710,6 +727,20 @@ class SalesOrderApp:
         self.sales_tax_item_var = tk.StringVar(
             value=self.settings.get("sales_tax_item", "CA Tax")
         )
+        saved_doc = self.settings.get("document_type", DOCUMENT_SALES_ORDER)
+        if saved_doc not in (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE):
+            saved_doc = DOCUMENT_SALES_ORDER
+        self.document_type_var = tk.StringVar(value=saved_doc)
+        self.doc_no_label_var = tk.StringVar(value=document_number_label(saved_doc))
+        self.doc_date_label_var = tk.StringVar(value=document_date_label(saved_doc))
+        self.step4_title_var = tk.StringVar(
+            value=f"Upload the {document_noun(saved_doc)} to QuickBooks"
+        )
+        saved_elev = self.settings.get("qb_elevation_mode", "match_quickbooks")
+        if saved_elev not in ("match_quickbooks", "administrator", "standard"):
+            saved_elev = "match_quickbooks"
+        self.qb_elevation_mode = saved_elev
+        self.quickbooks_vendors: list[dict] = list(self.settings.get("quickbooks_vendors", []) or [])
         self.room_grouping_var = tk.BooleanVar(value=bool(self.settings.get("room_grouping_enabled", False)))
         # Default ON: auto-connect on every launch. If the attach fails the
         # status pill just shows "Not Connected" and the user can click
@@ -753,44 +784,78 @@ class SalesOrderApp:
         self._build_layout()
         self._build_menu()
         self._set_qb_status(self._not_connected_message(), state="disconnected")
-        self.root.after(400, self._warn_if_elevated)
+        self.root.after(400, self._apply_startup_elevation)
         if self.auto_connect_on_startup:
             self.root.after(900, self._connect_quickbooks_on_startup)
         else:
             log.info("Auto-connect on startup disabled")
         self.root.after(1200, self.check_for_updates_on_startup)
 
-    def _warn_if_elevated(self) -> None:
-        """Show a one-time warning if the app is running elevated.
+    def _apply_startup_elevation(self) -> None:
+        """Match this process's UAC level to the QuickBooks elevation setting.
 
-        QuickBooks Desktop is almost always launched as a standard user. If
-        this app is elevated, QBXMLRP2 cannot attach across the UAC boundary
-        and instead spawns a second elevated QuickBooks window, which fails
-        with -2147220457. The user has to relaunch this app non-elevated to
-        recover — this dialog tells them up front instead of making them
-        diagnose it from the log.
+        v1.063: the user can choose Match QuickBooks / Administrator / standard
+        user. If the current process doesn't match, offer a one-click relaunch
+        instead of only warning them to uncheck a shortcut box.
         """
         try:
-            elevation = _current_process_elevation()
+            current = current_process_elevation()
         except Exception:
-            log.exception("_warn_if_elevated: could not determine elevation")
+            log.exception("_apply_startup_elevation: could not determine elevation")
             return
-        log.info("Startup elevation check: %s", elevation)
-        if elevation != "elevated":
-            return
-        log.warning("Startup: app is elevated — showing relaunch warning to user")
-        self._set_qb_status("Elevated — relaunch as non-admin", state="disconnected")
-        messagebox.showwarning(
-            "Run as Administrator detected",
-            "This app is running as Administrator.\n\n"
-            "QuickBooks Desktop is typically running under your normal Windows user, "
-            "and the SDK cannot attach across that UAC boundary — connection will fail "
-            "and a second QuickBooks window will appear.\n\n"
-            "Close this app, then reopen it normally (not 'Run as administrator'):\n"
-            "  • Right-click the shortcut → Properties → Shortcut → Advanced…\n"
-            "  • Make sure 'Run as administrator' is UNCHECKED → OK.\n\n"
-            "Then relaunch the app and click Connect.",
+        required = self._required_session_elevation()
+        log.info(
+            "Startup elevation check: current=%s required=%s mode=%s",
+            current,
+            required,
+            self.qb_elevation_mode,
         )
+        if current == "unknown" or required == "unknown" or current == required:
+            return
+        self._set_qb_status(
+            f"Needs relaunch as {'Administrator' if required == 'elevated' else 'standard user'}",
+            state="disconnected",
+        )
+        noun = "Administrator" if required == "elevated" else "a standard user"
+        if not messagebox.askyesno(
+            "Relaunch for QuickBooks",
+            "QuickBooks Desktop can only talk to this app when both are running "
+            f"at the same Windows privilege level.\n\n"
+            f"This app is running as "
+            f"{'Administrator' if current == 'elevated' else 'a standard user'}. "
+            f"Your setting requires {noun}.\n\n"
+            f"Relaunch as {noun} now?",
+        ):
+            return
+        self._relaunch_for_elevation(required)
+
+    def _required_session_elevation(self) -> str:
+        mode = self.qb_elevation_mode
+        if mode == "administrator":
+            return "elevated"
+        if mode == "standard":
+            return "standard"
+        qb = quickbooks_ui_elevation()
+        if qb in ("elevated", "standard"):
+            return qb
+        return "standard"
+
+    def _relaunch_for_elevation(self, required: str) -> None:
+        try:
+            if required == "elevated":
+                relaunch_as_administrator()
+            else:
+                relaunch_as_standard_user()
+        except Exception as exc:
+            log.exception("elevation relaunch failed")
+            messagebox.showerror(
+                "Relaunch failed",
+                f"Could not relaunch this app:\n\n{exc}",
+            )
+
+    def _warn_if_elevated(self) -> None:
+        """Back-compat wrapper; startup now uses _apply_startup_elevation."""
+        self._apply_startup_elevation()
 
     def _configure_styles(self) -> None:
         c = UI
@@ -1219,6 +1284,18 @@ class SalesOrderApp:
             foreground=[("active", c["text_primary"])],
         )
         self.style.configure(
+            "Card.TRadiobutton",
+            background=c["bg_card"],
+            foreground=c["text_primary"],
+            font=("Segoe UI", 10),
+            focuscolor=c["bg_card"],
+        )
+        self.style.map(
+            "Card.TRadiobutton",
+            background=[("active", c["bg_card"])],
+            foreground=[("active", c["text_primary"])],
+        )
+        self.style.configure(
             "TCheckbutton",
             background=c["bg_window"],
             foreground=c["text_primary"],
@@ -1248,6 +1325,10 @@ class SalesOrderApp:
         )
         setup_menu.add_command(label="Connect to QuickBooks Desktop", command=self.connect_quickbooks)
         setup_menu.add_command(label="QuickBooks Admin Setup", command=self.show_qb_admin_setup_guide)
+        setup_menu.add_command(label="QuickBooks Elevation…", command=self.show_elevation_settings)
+        setup_menu.add_separator()
+        setup_menu.add_command(label="Match Vendor Names…", command=self.match_vendor_names)
+        setup_menu.add_command(label="Pull Vendors from QuickBooks…", command=self.pull_quickbooks_vendors)
         setup_menu.add_separator()
         setup_menu.add_command(label="Import Vendor Price List…", command=self.import_vendor_price_list)
         setup_menu.add_command(label="Change Pricing Rules", command=self.change_pricing_rules)
@@ -2212,6 +2293,9 @@ class SalesOrderApp:
             "fallback_item": self.fallback_item_var.get().strip(),
             "income_account": self.income_account_var.get().strip(),
             "sales_tax_item": self.sales_tax_item_var.get().strip(),
+            "document_type": self.document_type_var.get().strip() or DOCUMENT_SALES_ORDER,
+            "qb_elevation_mode": self.qb_elevation_mode,
+            "quickbooks_vendors": self.quickbooks_vendors,
             "room_grouping_enabled": bool(self.room_grouping_var.get()),
             "auto_connect_on_startup": self.auto_connect_on_startup,
             "pricing_mode": self.pricing_mode,
@@ -2347,7 +2431,27 @@ class SalesOrderApp:
             form,
             text="Fill in the customer & order details",
             style="StepTitle.TLabel",
-        ).grid(row=1, column=5, columnspan=11, sticky="w", padx=4, pady=(0, 6))
+        ).grid(row=1, column=5, columnspan=11, sticky="w", padx=4, pady=(0, 2))
+
+        doc_row = ttk.Frame(form, style="Card.TFrame")
+        doc_row.grid(row=1, column=5, columnspan=11, sticky="e", padx=4, pady=(0, 2))
+        ttk.Label(doc_row, text="Document", style="FieldLabel.TLabel").pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(
+            doc_row,
+            text="Sales Order",
+            value=DOCUMENT_SALES_ORDER,
+            variable=self.document_type_var,
+            command=self._on_document_type_changed,
+            style="Card.TRadiobutton",
+        ).pack(side="left")
+        ttk.Radiobutton(
+            doc_row,
+            text="Estimate",
+            value=DOCUMENT_ESTIMATE,
+            variable=self.document_type_var,
+            command=self._on_document_type_changed,
+            style="Card.TRadiobutton",
+        ).pack(side="left", padx=(8, 0))
 
         # --- Row 2/3: Source File, Customer, Sales Order No, Fetch ---
         # Reshuffled v1.033 to make Customer noticeably longer. Spans
@@ -2369,7 +2473,8 @@ class SalesOrderApp:
             form, "Customer", self.customer_var, 2, 5, 5, min_chars=24
         )
         so_no_entry = self._form_entry(
-            form, "Sales Order No", self.sales_order_no_var, 2, 10, 3, min_chars=8
+            form, "Sales Order No", self.sales_order_no_var, 2, 10, 3, min_chars=8,
+            label_variable=self.doc_no_label_var,
         )
         ttk.Button(
             form,
@@ -2380,7 +2485,8 @@ class SalesOrderApp:
 
         # --- Row 4/5: Sales Order Date, Due Date ---
         so_date_entry = self._date_entry(
-            form, "Sales Order Date", self.sales_order_date_var, 4, 0, 6, min_chars=11
+            form, "Sales Order Date", self.sales_order_date_var, 4, 0, 6, min_chars=11,
+            label_variable=self.doc_date_label_var,
         )
         due_date_entry = self._date_entry(
             form, "Due Date", self.due_date_var, 4, 6, 6, min_chars=11
@@ -2391,8 +2497,8 @@ class SalesOrderApp:
         # state immediately.
         self._required_fields = [
             ("Customer", self.customer_var, customer_entry),
-            ("Sales Order No", self.sales_order_no_var, so_no_entry),
-            ("Sales Order Date", self.sales_order_date_var, so_date_entry),
+            (self.doc_no_label_var, self.sales_order_no_var, so_no_entry),
+            (self.doc_date_label_var, self.sales_order_date_var, so_date_entry),
             ("Due Date", self.due_date_var, due_date_entry),
         ]
         for _, var, entry in self._required_fields:
@@ -2472,7 +2578,7 @@ class SalesOrderApp:
         )
         ttk.Label(
             step4,
-            text="Upload the sales order to QuickBooks",
+            textvariable=self.step4_title_var,
             style="StepTitleOnWindow.TLabel",
         ).pack(anchor="w", padx=2, pady=(0, 4))
         ttk.Button(
@@ -2531,6 +2637,7 @@ class SalesOrderApp:
         out_scroll_y.grid(row=0, column=1, sticky="ns")
         out_scroll_x.grid(row=1, column=0, sticky="ew")
         self.output_tree.bind("<Double-1>", self._edit_output_row)
+        self._on_document_type_changed()
 
         self.source_tree = ttk.Treeview(source_tab, columns=self.source_preview_columns, show="headings")
         for col in self.source_preview_columns:
@@ -2677,7 +2784,7 @@ class SalesOrderApp:
                     entry.configure(style="Error.TEntry")
                 except tk.TclError:
                     pass
-                missing.append(label)
+                missing.append(label.get() if hasattr(label, "get") else label)
         return missing
 
     def _path_row(self, parent, label, var, browse_cmd, row_idx):
@@ -2710,28 +2817,38 @@ class SalesOrderApp:
             side="left", fill="x", expand=True
         )
 
-    def _form_entry(self, parent, label, var, row, col, span, min_chars=10):
+    def _form_entry(self, parent, label, var, row, col, span, min_chars=10, label_variable=None):
         """Grid a labelled text entry. `min_chars` is the entry's minimum
         character width — sticky="ew" lets it grow when the cell is wider,
         but won't let it shrink below this floor. Stops fields from
         collapsing to "Pr..." / "C:/Us..." on a narrow window."""
-        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
-            row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
-        )
+        if label_variable is not None:
+            ttk.Label(parent, textvariable=label_variable, style="FieldLabel.TLabel").grid(
+                row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
+            )
+        else:
+            ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
+                row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
+            )
         entry = ttk.Entry(parent, textvariable=var, width=min_chars)
         entry.grid(
             row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4)
         )
         return entry
 
-    def _date_entry(self, parent, label, var, row, col, span, min_chars=12):
+    def _date_entry(self, parent, label, var, row, col, span, min_chars=12, label_variable=None):
         """Form entry with a small 📅 picker button on the right. The
         picker packs first (right) so it always reserves its width;
         the entry packs second (left) and grows to fill the rest, but
         won't shrink narrower than `min_chars` characters."""
-        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
-            row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
-        )
+        if label_variable is not None:
+            ttk.Label(parent, textvariable=label_variable, style="FieldLabel.TLabel").grid(
+                row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
+            )
+        else:
+            ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(
+                row=row, column=col, sticky="w", padx=4, pady=(4, 1), columnspan=span
+            )
         wrap = ttk.Frame(parent, style="Card.TFrame")
         wrap.grid(row=row + 1, column=col, columnspan=span, sticky="ew", padx=4, pady=(0, 4))
         ttk.Button(
@@ -2916,6 +3033,360 @@ class SalesOrderApp:
             self._persist_settings()
             self._set_status(f"Output path updated: {Path(path).name}")
 
+    def _on_document_type_changed(self) -> None:
+        dtype = self.document_type_var.get() or DOCUMENT_SALES_ORDER
+        if dtype not in (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE):
+            dtype = DOCUMENT_SALES_ORDER
+            self.document_type_var.set(dtype)
+        self.doc_no_label_var.set(document_number_label(dtype))
+        self.doc_date_label_var.set(document_date_label(dtype))
+        self.step4_title_var.set(f"Upload the {document_noun(dtype)} to QuickBooks")
+        if hasattr(self, "output_tree"):
+            try:
+                self.output_tree.heading("Sales Order No", text=document_number_label(dtype))
+                self.output_tree.heading("Sales Order Date", text=document_date_label(dtype))
+            except tk.TclError:
+                pass
+        self._persist_settings()
+        self._set_status(
+            f"Document type: {document_noun_title(dtype)}. "
+            "SaaSant export headers and the QuickBooks upload follow this setting."
+        )
+
+    def _document_type(self) -> str:
+        value = self.document_type_var.get() or DOCUMENT_SALES_ORDER
+        return value if value in (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE) else DOCUMENT_SALES_ORDER
+
+    def _qb_vendor_names(self) -> list[str]:
+        names = []
+        for row in self.quickbooks_vendors:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            if name and row.get("isActive", True):
+                names.append(name)
+        return names
+
+    def _all_known_vendor_names(self) -> list[str]:
+        names = set(self.vendor_clean) | set(self.brand_values) | set(self.vendor_notes)
+        names.update(self._qb_vendor_names())
+        for src, tgt in self.brand_aliases.items():
+            if tgt in names:
+                names.add(src)
+        return sorted(n for n in names if n)
+
+    def _unmatched_source_brands(self) -> list[str]:
+        if self.source_df is None or self.source_df.empty:
+            return []
+        known = set(self._all_known_vendor_names())
+        unmatched = []
+        for brand in unique_brands(self.source_df):
+            if brand and brand not in known:
+                unmatched.append(brand)
+        return unmatched
+
+    def match_vendor_names(self) -> None:
+        """Map quote brand names that don't match anyone in the system."""
+        try:
+            try:
+                self._ensure_source_loaded()
+            except Exception:
+                self.source_df = None
+            unmatched = self._unmatched_source_brands()
+            blank_rows: list[tuple[int, str]] = []
+            if self.source_df is not None and not self.source_df.empty:
+                for idx, row in self.source_df.iterrows():
+                    brand = str(row.get("Brand", "")).strip()
+                    sku = str(row.get("SKU", "")).strip()
+                    if not brand:
+                        blank_rows.append((int(idx) + 2, sku))
+            if not unmatched and not blank_rows:
+                messagebox.showinfo(
+                    "Match Vendor Names",
+                    "Every brand on the current quote already matches a vendor "
+                    "in the price list, an alias, or a name pulled from QuickBooks.",
+                )
+                return
+            cancelled = self._prompt_match_vendor_names(unmatched, blank_rows)
+            if cancelled:
+                return
+            self._set_status("Vendor name matches saved.")
+        except Exception as exc:
+            log.exception("match_vendor_names failed")
+            messagebox.showerror("Match Vendor Names", str(exc))
+
+    def _prompt_match_vendor_names(
+        self,
+        unmatched_brands: list[str],
+        blank_rows: list[tuple[int, str]],
+    ) -> bool:
+        c = UI
+        known = self._all_known_vendor_names()
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Match Vendor Names")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("720x560")
+        try:
+            dlg.minsize(560, 420)
+        except tk.TclError:
+            pass
+        dlg.transient(self.root)
+        dlg.grab_set()
+        outcome = {"cancelled": True}
+
+        tk.Frame(dlg, bg=c["accent"], height=3).pack(fill="x", side="top")
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=(18, 14))
+        tk.Label(
+            body,
+            text="Match quote vendor names to names already in the system",
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 11),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text=(
+                "This does not change multipliers. It only remembers that a name "
+                "on a quote is the same vendor as one you already have — including "
+                "vendors pulled from QuickBooks."
+            ),
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 9),
+            anchor="w",
+            wraplength=660,
+            justify="left",
+        ).pack(fill="x", pady=(3, 10))
+
+        button_row = tk.Frame(body, bg=c["bg_window"])
+        button_row.pack(fill="x", side="bottom", pady=(10, 0))
+        wrapper = tk.Frame(
+            body, bg=c["bg_card"], highlightbackground=c["border"], highlightthickness=1, bd=0
+        )
+        wrapper.pack(fill="both", expand=True)
+        canvas = tk.Canvas(wrapper, highlightthickness=0, bg=c["bg_card"], bd=0)
+        scroll = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas, style="Card.TFrame")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
+        scroll.pack(side="right", fill="y", pady=8)
+
+        match_options = [""] + known
+        brand_vars: dict[str, tk.StringVar] = {}
+        for brand in unmatched_brands:
+            suggestion = suggest_vendor(brand, known) or ""
+            var = tk.StringVar(value=suggestion)
+            brand_vars[brand] = var
+            row = ttk.Frame(inner, style="Card.TFrame")
+            row.pack(fill="x", padx=10, pady=6)
+            ttk.Label(row, text=brand, style="Card.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
+            combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
+            combo.pack(fill="x", pady=(2, 0))
+
+        line_vars: dict[int, tk.StringVar] = {}
+        for excel_line, sku in blank_rows:
+            var = tk.StringVar(value="")
+            line_vars[excel_line] = var
+            row = ttk.Frame(inner, style="Card.TFrame")
+            row.pack(fill="x", padx=10, pady=6)
+            ttk.Label(
+                row,
+                text=f"Line {excel_line} ({sku or 'no SKU'}) — no vendor name",
+                style="Card.TLabel",
+                font=("Segoe UI Semibold", 9),
+            ).pack(anchor="w")
+            combo = ttk.Combobox(row, textvariable=var, values=match_options, state="readonly")
+            combo.pack(fill="x", pady=(2, 0))
+
+        def save() -> None:
+            for brand, var in brand_vars.items():
+                target = var.get().strip()
+                if not target:
+                    messagebox.showwarning(
+                        "Match Vendor Names",
+                        f"Match “{brand}” to a vendor already in the system.",
+                        parent=dlg,
+                    )
+                    return
+                self.brand_aliases[brand] = target
+            if self.source_df is not None and line_vars:
+                for idx, row in self.source_df.iterrows():
+                    excel_line = int(idx) + 2
+                    chosen = line_vars.get(excel_line)
+                    if chosen is None:
+                        continue
+                    name = chosen.get().strip()
+                    if not name:
+                        messagebox.showwarning(
+                            "Match Vendor Names",
+                            f"Line {excel_line} has no vendor name. Pick one from the system.",
+                            parent=dlg,
+                        )
+                        return
+                    self.source_df.at[idx, "Brand"] = name
+            self._persist_settings()
+            outcome["cancelled"] = False
+            dlg.destroy()
+
+        ttk.Button(button_row, text="Save matches", command=save, style="Primary.TButton").pack(side="right")
+        ttk.Button(button_row, text="Cancel", command=dlg.destroy, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+        dlg.wait_window()
+        return outcome["cancelled"]
+
+    def pull_quickbooks_vendors(self) -> None:
+        self._set_status("Pulling vendors from QuickBooks...")
+        self._set_qb_status("Pulling vendors...", state="pending")
+
+        def worker() -> None:
+            try:
+                vendors = self._qb_client().query_vendors(include_inactive=True)
+                self.root.after(0, lambda: self._pull_vendors_done(vendors))
+            except Exception as exc:
+                log.exception("pull_quickbooks_vendors failed")
+                self.root.after(0, lambda e=exc: self._pull_vendors_failed(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _pull_vendors_done(self, vendors: list[dict]) -> None:
+        self.quickbooks_vendors = vendors
+        self._persist_settings()
+        active = sum(1 for row in vendors if row.get("isActive", True))
+        self._set_qb_status("Connected", state="connected")
+        self._set_status(f"Pulled {active} active vendor name(s) from QuickBooks.")
+        messagebox.showinfo(
+            "QuickBooks Vendors",
+            f"Saved {len(vendors)} vendor name(s) from QuickBooks "
+            f"({active} active).\n\n"
+            "These names are used when matching quote brands. They do not "
+            "replace cost multipliers.",
+        )
+
+    def _pull_vendors_failed(self, exc: Exception) -> None:
+        self._set_qb_status("Connection Failed", state="disconnected")
+        self._set_status("Pull vendors from QuickBooks failed.")
+        messagebox.showerror("QuickBooks Vendors", str(exc))
+
+    def show_elevation_settings(self) -> None:
+        c = UI
+        dlg = tk.Toplevel(self.root)
+        dlg.title("QuickBooks Elevation")
+        dlg.configure(bg=c["bg_window"])
+        dlg.geometry("560x420")
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        tk.Frame(dlg, bg=c["accent"], height=3).pack(fill="x")
+        body = tk.Frame(dlg, bg=c["bg_window"])
+        body.pack(fill="both", expand=True, padx=22, pady=18)
+
+        tk.Label(
+            body,
+            text="Relaunch elevation",
+            bg=c["bg_window"],
+            fg=c["accent"],
+            font=("Segoe UI Semibold", 11),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text=(
+                "QuickBooks Desktop only accepts SDK connections from an app "
+                "running at the same UAC level. If QuickBooks was opened as "
+                "Administrator, this app must relaunch as Administrator too."
+            ),
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 9),
+            wraplength=500,
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(4, 12))
+
+        mode_var = tk.StringVar(value=self.qb_elevation_mode)
+        for value, title, hint in (
+            (
+                "match_quickbooks",
+                "Match QuickBooks",
+                "Relaunch to whatever privilege level the QuickBooks window is using.",
+            ),
+            (
+                "administrator",
+                "Relaunch as Administrator",
+                "Always request a UAC elevation prompt.",
+            ),
+            (
+                "standard",
+                "Relaunch as standard user",
+                "Always run as a normal Windows user.",
+            ),
+        ):
+            ttk.Radiobutton(
+                body,
+                text=title,
+                value=value,
+                variable=mode_var,
+            ).pack(anchor="w")
+            tk.Label(
+                body,
+                text=hint,
+                bg=c["bg_window"],
+                fg=c["text_tertiary"],
+                font=("Segoe UI", 8),
+                wraplength=500,
+                justify="left",
+                anchor="w",
+            ).pack(fill="x", padx=(22, 0), pady=(0, 8))
+
+        try:
+            current = current_process_elevation()
+        except Exception:
+            current = "unknown"
+        qb = quickbooks_ui_elevation()
+        tk.Label(
+            body,
+            text=(
+                f"This app: {'Administrator' if current == 'elevated' else 'standard user' if current == 'standard' else current}\n"
+                f"QuickBooks: {'Administrator' if qb == 'elevated' else 'standard user' if qb == 'standard' else 'not detected'}"
+            ),
+            bg=c["bg_window"],
+            fg=c["text_secondary"],
+            font=("Segoe UI", 9),
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(8, 0))
+
+        def save() -> None:
+            self.qb_elevation_mode = mode_var.get()
+            self._persist_settings()
+            dlg.destroy()
+            required = self._required_session_elevation()
+            try:
+                now = current_process_elevation()
+            except Exception:
+                now = "unknown"
+            if now != required and required in ("elevated", "standard") and now in ("elevated", "standard"):
+                noun = "Administrator" if required == "elevated" else "a standard user"
+                if messagebox.askyesno(
+                    "Relaunch now?",
+                    f"Relaunch as {noun} so this setting takes effect?",
+                ):
+                    self._relaunch_for_elevation(required)
+            else:
+                messagebox.showinfo("QuickBooks Elevation", "Elevation setting saved.")
+
+        btns = tk.Frame(body, bg=c["bg_window"])
+        btns.pack(fill="x", side="bottom", pady=(16, 0))
+        ttk.Button(btns, text="Save", command=save, style="Primary.TButton").pack(side="right")
+        ttk.Button(btns, text="Cancel", command=dlg.destroy, style="Quiet.TButton").pack(
+            side="right", padx=(0, 8)
+        )
+
     def _browse_qb_company_file(self):
         path = filedialog.askopenfilename(
             title="Select QuickBooks Company File",
@@ -3024,6 +3495,25 @@ class SalesOrderApp:
             silent,
             self.qb_company_file_var.get().strip(),
         )
+        if not silent:
+            required = self._required_session_elevation()
+            try:
+                current = current_process_elevation()
+            except Exception:
+                current = "unknown"
+            if (
+                current in ("elevated", "standard")
+                and required in ("elevated", "standard")
+                and current != required
+            ):
+                noun = "Administrator" if required == "elevated" else "a standard user"
+                if messagebox.askyesno(
+                    "Relaunch for QuickBooks",
+                    "This app and QuickBooks must run at the same Windows privilege "
+                    f"level.\n\nRelaunch as {noun} before connecting?",
+                ):
+                    self._relaunch_for_elevation(required)
+                    return
         try:
             company_name = self._qb_client().test_connection()
             log.info("Connect QuickBooks: success, company=%r", company_name)
@@ -3451,6 +3941,17 @@ class SalesOrderApp:
             # (and anything not in the list) are asked — variable by default,
             # with the option to lock the cost.
             if self.pricing_mode == "brand":
+                unmatched = self._unmatched_source_brands()
+                blank_rows: list[tuple[int, str]] = []
+                for idx, row in self.source_df.iterrows():
+                    brand = str(row.get("Brand", "")).strip()
+                    sku = str(row.get("SKU", "")).strip()
+                    if not brand:
+                        blank_rows.append((int(idx) + 2, sku))
+                if unmatched or blank_rows:
+                    cancelled = self._prompt_match_vendor_names(unmatched, blank_rows)
+                    if cancelled:
+                        return
                 source_brands = unique_brands(self.source_df)
                 known = self._known_brands()
                 missing = [b for b in source_brands if b and b not in known]
@@ -3670,7 +4171,8 @@ class SalesOrderApp:
         date_part = datetime.now().strftime("%m-%d-%Y")
         so_value = self.sales_order_no_var.get().strip() or "SO"
         safe_so = "".join(ch for ch in so_value if ch.isalnum() or ch in ("-", "_")) or "SO"
-        default_name = f"SalesOrder_{safe_so}_{date_part}.xlsx"
+        prefix = saasant_filename_prefix(self._document_type())
+        default_name = f"{prefix}_{safe_so}_{date_part}.xlsx"
 
         downloads = Path.home() / "Downloads"
         saved = (self.output_path_var.get() or "").strip()
@@ -3698,7 +4200,9 @@ class SalesOrderApp:
         output_path = self._ask_export_path("Export Template")
         if output_path is None:
             return
-        self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
+        export_df = saasant_export_frame(self._export_df(), self._document_type())
+        sheet = saasant_sheet_name(self._document_type())
+        export_df.to_excel(output_path, index=False, sheet_name=sheet)
         self.output_path_var.set(str(output_path))
         self._persist_settings()
         self._set_status(f"Exported template file: {output_path.name}")
@@ -3711,7 +4215,9 @@ class SalesOrderApp:
         output_path = self._ask_export_path("Export for SaaSant")
         if output_path is None:
             return
-        self._export_df().to_excel(output_path, index=False, sheet_name="Sales Order")
+        export_df = saasant_export_frame(self._export_df(), self._document_type())
+        sheet = saasant_sheet_name(self._document_type())
+        export_df.to_excel(output_path, index=False, sheet_name=sheet)
         self.output_path_var.set(str(output_path))
         self._persist_settings()
         self._set_status(f"SaaSant export ready: {output_path.name}")
@@ -3796,6 +4302,7 @@ class SalesOrderApp:
             income_account=self.income_account_var.get().strip(),
             expense_account="COGS Non Inventory",
             group_by_room=True,
+            document_type=self._document_type(),
         )
         log.info(
             "Upload to QuickBooks: starting — customer=%r so=%r lines=%d",
@@ -3834,7 +4341,7 @@ class SalesOrderApp:
 
         header = tk.Label(
             body,
-            text="Uploading sales order...",
+            text=f"Uploading {document_noun(self._document_type())}...",
             bg=c["bg_window"],
             fg=c["accent"],
             font=("Segoe UI Semibold", 16),
@@ -3917,7 +4424,9 @@ class SalesOrderApp:
                 )
                 return
             self._set_qb_status("Connected", state="connected")
-            self._set_status("Sales order uploaded to QuickBooks successfully.")
+            self._set_status(
+                f"{document_noun_title(self._document_type())} uploaded to QuickBooks successfully."
+            )
             created = list(getattr(state["client"], "last_created_items", []) or [])
             if created:
                 self._show_created_items_report(state["result"], created)
@@ -3946,7 +4455,10 @@ class SalesOrderApp:
                 append_log(f"ERROR: {state['error']}", tag="err")
                 done_btn.configure(text="Close")
             else:
-                header.config(text="Done — sales order uploaded", fg=c["success"])
+                header.config(
+                    text=f"Done — {document_noun(self._document_type())} uploaded",
+                    fg=c["success"],
+                )
                 append_log("", tag="muted")
                 append_log(state["result"] or "Upload complete.", tag="ok")
                 # The whole point of the app: prove how much hand-keying it

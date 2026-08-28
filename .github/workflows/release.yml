@@ -1,0 +1,93 @@
+name: Build Windows installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+          python -m pip install --force-reinstall --no-binary charset-normalizer charset-normalizer
+
+      - name: Build DMQuotes.exe
+        run: |
+          python -m PyInstaller --noconfirm --onefile --windowed --name "DMQuotes" --icon "DMQuotes.ico" --splash "splash.png" --collect-all numpy --collect-all pandas --collect-all openpyxl --collect-all xlrd --collect-all pdfplumber --collect-all pdfminer --collect-all cryptography --collect-all cffi --collect-all charset_normalizer --add-data "Logo_New.png;." --add-data "DMQuotes.ico;." --add-data "vendor_pricing.json;." app.py
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Setup.exe
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe" }
+          & $iscc installer.iss
+          if (-not (Test-Path "dist\QB-Sales-Order-Converter-Setup.exe")) {
+            throw "Setup.exe was not created"
+          }
+
+      - name: Hash installer
+        id: hash
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "dist\QB-Sales-Order-Converter-Setup.exe" -Algorithm SHA256).Hash.ToLower()
+          echo "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Set-Content -Path dist\SHA256.txt -Value $hash -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QB-Sales-Order-Converter-Setup
+          path: |
+            dist/QB-Sales-Order-Converter-Setup.exe
+            dist/SHA256.txt
+
+      - name: Publish GitHub Release and update feed
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.TrimStart('v')
+          $sha = "${{ steps.hash.outputs.sha256 }}"
+          $notes = @"
+          v$ver for every installed copy of DMQuotes.
+
+          - Sales Order or Estimate (SaaSant headers, sheet name, and filename)
+          - Match vendor names that did not line up with anyone in the system
+          - Pull vendor names from QuickBooks Desktop
+          - Relaunch elevation setting so the app matches QuickBooks UAC
+
+          SHA256: $sha
+          "@
+          gh release create $tag "dist/QB-Sales-Order-Converter-Setup.exe#QB-Sales-Order-Converter-Setup.exe" --title "DMQuotes v$ver" --notes $notes
+          $feed = @{
+            version = $ver
+            url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
+            sha256 = $sha
+            notes = "Estimate vs Sales Order SaaSant export, Match vendor names, pull QuickBooks vendors, and a QuickBooks elevation relaunch setting."
+          } | ConvertTo-Json
+          Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
+          Copy-Item releases/latest.json releases/beta.json -Force
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/latest.json releases/beta.json
+          git commit -m "Update release feed for $tag" 
+          git push origin HEAD:${{ github.event.repository.default_branch }}

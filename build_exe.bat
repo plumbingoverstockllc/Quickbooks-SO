@@ -71,4 +71,5 @@ if exist "C:\Users\QB-PC\AppData\Local\Programs\Inno Setup 6\ISCC.exe" (
 
 echo.
 echo Build complete. Check dist folder for portable EXE and Setup.exe.
+if defined GITHUB_ACTIONS goto :eof
 pause
