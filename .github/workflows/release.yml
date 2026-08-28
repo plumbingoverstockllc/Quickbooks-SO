@@ -67,23 +67,51 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $ver = $tag.TrimStart('v')
           $sha = "${{ steps.hash.outputs.sha256 }}"
-          $notes = @"
-          v$ver for every installed copy of DMQuotes.
+          # A 'b' suffix (v1.072b) marks a test build. Betas are published as
+          # GitHub prereleases and only ever touch releases/beta.json, so an
+          # installed stable copy is never offered them by its startup check.
+          $isBeta = $ver.ToLower().EndsWith('b')
+          $asset = "dist/QB-Sales-Order-Converter-Setup.exe#QB-Sales-Order-Converter-Setup.exe"
+          $url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
 
-          - Setup now clears the PyInstaller variables it inherits from the running app, so the relaunch after an update no longer fails with "Security validation failure: parent process has different executable!"
-          - This makes upgrades work from any older build, including ones whose own updater does not clean up after itself
+          if ($isBeta) {
+            $summary = "Uploads stop when the customer is not in QuickBooks instead of creating one; vendor pickers list each QuickBooks vendor once."
+            $body = @(
+              "Beta v$ver — test build. Install it from Help -> Check for Beta Update.",
+              "",
+              "- An upload whose customer is not in the QuickBooks Customer list now stops and says so, instead of creating the customer. This prevents near-duplicate customer records from typos and spelling differences.",
+              "- Vendor pickers list each QuickBooks vendor once, under its list name. The vendor's Company Name is no longer offered as a second, near-identical choice.",
+              "",
+              "SHA256: $sha"
+            ) -join "`n"
+            gh release create $tag $asset --title "DMQuotes v$ver (beta)" --notes $body --prerelease
+            $feedPath = "releases/beta.json"
+          } else {
+            $summary = "Setup clears inherited PyInstaller environment variables so the post-update relaunch no longer hits the bootloader security check."
+            $body = @(
+              "v$ver for every installed copy of DMQuotes.",
+              "",
+              "- Setup now clears the PyInstaller variables it inherits from the running app, so the relaunch after an update no longer fails with ""Security validation failure: parent process has different executable!""",
+              "- This makes upgrades work from any older build, including ones whose own updater does not clean up after itself",
+              "",
+              "SHA256: $sha"
+            ) -join "`n"
+            gh release create $tag $asset --title "DMQuotes v$ver" --notes $body
+            $feedPath = "releases/latest.json"
+          }
 
-          SHA256: $sha
-          "@
-          gh release create $tag "dist/QB-Sales-Order-Converter-Setup.exe#QB-Sales-Order-Converter-Setup.exe" --title "DMQuotes v$ver" --notes $notes
           $feed = @{
             version = $ver
-            url = "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/$tag/QB-Sales-Order-Converter-Setup.exe"
+            url = $url
             sha256 = $sha
-            notes = "Setup clears inherited PyInstaller environment variables so the post-update relaunch no longer hits the bootloader security check."
+            notes = $summary
           } | ConvertTo-Json
-          Set-Content -Path releases/latest.json -Value $feed -Encoding utf8
-          Copy-Item releases/latest.json releases/beta.json -Force
+          Set-Content -Path $feedPath -Value $feed -Encoding utf8
+          if (-not $isBeta) {
+            # Point the beta channel at the new stable so a superseded beta is
+            # never re-offered to someone who moved to stable.
+            Copy-Item releases/latest.json releases/beta.json -Force
+          }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add releases/latest.json releases/beta.json

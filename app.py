@@ -20,6 +20,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from quickbooks_client import (
+    CUSTOMER_NOT_FOUND_MESSAGE,
+    CustomerNotFoundError,
     QuickBooksClient,
     _current_process_elevation,
     current_process_elevation,
@@ -55,7 +57,7 @@ DEFAULT_SOURCE = r"C:\Users\QB-PC\Downloads\Project-LisaStrongDesign-EliezerLabk
 DEFAULT_TEMPLATE = r"C:\Users\QB-PC\Downloads\SaasAnt Template for David Meyer.xlsx"
 DEFAULT_OUTPUT = r"C:\Users\QB-PC\Downloads\SaaSant Sales Order - Auto Filled.xlsx"
 APP_NAME = "DMQuotes"
-APP_VERSION = "v1.071"
+APP_VERSION = "v1.072b"
 # Features still being tested are gated on this flag. The version label is
 # the single source of truth: any APP_VERSION ending in 'b' (the beta
 # suffix convention used by this app) shows beta-only UI; stable builds
@@ -3472,11 +3474,13 @@ Write-UpdateLog 'helper done'
         return value if value in (DOCUMENT_SALES_ORDER, DOCUMENT_ESTIMATE) else DOCUMENT_SALES_ORDER
 
     def _qb_vendor_names(self) -> list[str]:
-        """Active QuickBooks vendor list names + company names.
+        """Active QuickBooks vendor list names — one entry per vendor.
 
-        QB often stores the list name as e.g. "Deluxe Vanity (ACH)" while
-        Company Name is "Deluxe Vanity". Offer both so either spelling can
-        be chosen in Match / Brand Pricing dialogs.
+        Company Name is deliberately not offered as a second choice. A vendor
+        stored as "Deluxe Vanity (ACH)" with company name "Deluxe Vanity" used
+        to appear twice in the pickers, which reads as two unrelated records
+        (and looks like a customer sitting next to a vendor) with no way to
+        tell which one to pick. The list name is what QuickBooks matches on.
         """
         names: list[str] = []
         seen: set[str] = set()
@@ -3485,11 +3489,10 @@ Write-UpdateLog 'helper done'
                 continue
             if not row.get("isActive", True):
                 continue
-            for key in ("name", "companyName"):
-                value = str(row.get(key) or "").strip()
-                if value and value not in seen:
-                    seen.add(value)
-                    names.append(value)
+            value = str(row.get("name") or "").strip()
+            if value and value not in seen:
+                seen.add(value)
+                names.append(value)
         return names
 
     def _all_known_vendor_names(self) -> list[str]:
@@ -5097,7 +5100,13 @@ Write-UpdateLog 'helper done'
         log_text.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        state: dict = {"result": None, "error": None, "client": None, "import_seconds": 0.0}
+        state: dict = {
+            "result": None,
+            "error": None,
+            "customer_missing": None,
+            "client": None,
+            "import_seconds": 0.0,
+        }
 
         def append_log(msg: str, tag: str = "") -> None:
             log_text.configure(state="normal")
@@ -5115,6 +5124,18 @@ Write-UpdateLog 'helper done'
         def finish() -> None:
             if dlg.winfo_exists():
                 dlg.destroy()
+            if state["customer_missing"]:
+                # Nothing went wrong technically — the connection is fine and
+                # there is nothing in the log worth reading, so skip the
+                # "Connection Failed" status and the log-file pointer.
+                messagebox.showwarning(
+                    "Customer Not Found",
+                    f"{CUSTOMER_NOT_FOUND_MESSAGE}.\n\n"
+                    f"“{state['customer_missing']}” is not in the QuickBooks "
+                    "Customer list. Add the customer in QuickBooks, then upload again.",
+                )
+                self._set_status(f"{CUSTOMER_NOT_FOUND_MESSAGE}.")
+                return
             if state["error"]:
                 self._set_qb_status("Connection Failed", state="disconnected")
                 messagebox.showerror(
@@ -5194,6 +5215,10 @@ Write-UpdateLog 'helper done'
                 )
                 state["result"] = result
                 log.info("Upload to QuickBooks: success — %s", result)
+            except CustomerNotFoundError as exc:
+                state["error"] = str(exc)
+                state["customer_missing"] = exc.customer_name
+                log.error("Upload to QuickBooks: customer %r not in QuickBooks", exc.customer_name)
             except Exception as exc:
                 state["error"] = str(exc)
                 log.error("Upload to QuickBooks: failed — %s", exc)
