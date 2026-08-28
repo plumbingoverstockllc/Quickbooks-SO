@@ -1,6 +1,6 @@
 {
-  "version": "1.061",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.061/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "d060cc329e02d73ea313323168a1d8c7cffa976310dc0b0440471457ecaede28",
-  "notes": "Sales order uploads now include the transaction sales tax item (ItemSalesTaxRef) on each SalesOrderAdd, fixing QuickBooks error 3180 when the header tax field was blank. Configure the Sales Tax Item in Configuration (default CA Tax)."
+  "sha256": "fbe1f731be4a4eda0df5ff3e54a6f6dba0532130d6db2d712f9bfaf1adee9b85",
+  "version": "1.063",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.063/QB-Sales-Order-Converter-Setup.exe",
+  "notes": "Estimate vs Sales Order SaaSant export, Match vendor names, pull QuickBooks vendors, and a QuickBooks elevation relaunch setting."
 }
