@@ -1,6 +1,6 @@
 {
-  "version": "1.067",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.067/QB-Sales-Order-Converter-Setup.exe",
-  "sha256": "e31f6967b07951cc7d498f73ef883b1d6001da5abd462aceab0631d6f2459d1b",
-  "notes": "Fix Estimate upload (no ShipMethodRef on EstimateAdd); type-to-search brand/vendor match dropdowns."
+  "version": "1.068",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.068/QB-Sales-Order-Converter-Setup.exe",
+  "notes": "Fix update helper launch (cmd start title vs program); Setup runs after download.",
+  "sha256": "0d9f0dcba3af4d50d1dba92d6228ed3c11e7d6d92c5d057ec2fd1992c96f5085"
 }
