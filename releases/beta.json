@@ -1,6 +1,6 @@
 {
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.069/QB-Sales-Order-Converter-Setup.exe",
-  "version": "1.069",
-  "sha256": "2e8bd8eb38728c29796af7624de6f68c3cc1ada72359bdc28d2fd85f3f9ec45d",
-  "notes": "Auto-create missing QB customers (3140 fix); typable vendor search; Shimira Labs logo."
+  "version": "1.070",
+  "sha256": "1ca6e07e48ee56502fa6e8dd2b776205276ef9595f5e95ba011b2663256c6a48",
+  "notes": "Update helper launches PowerShell directly with a start handshake; Fetch Next uses the Estimate number sequence.",
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.070/QB-Sales-Order-Converter-Setup.exe"
 }
