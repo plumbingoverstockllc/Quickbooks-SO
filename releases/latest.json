@@ -1,6 +1,6 @@
 {
-  "version": "1.068",
-  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.068/QB-Sales-Order-Converter-Setup.exe",
-  "notes": "Fix update helper launch (cmd start title vs program); Setup runs after download.",
-  "sha256": "0d9f0dcba3af4d50d1dba92d6228ed3c11e7d6d92c5d057ec2fd1992c96f5085"
+  "url": "https://github.com/plumbingoverstockllc/Quickbooks-SO/releases/download/v1.069/QB-Sales-Order-Converter-Setup.exe",
+  "version": "1.069",
+  "sha256": "2e8bd8eb38728c29796af7624de6f68c3cc1ada72359bdc28d2fd85f3f9ec45d",
+  "notes": "Auto-create missing QB customers (3140 fix); typable vendor search; Shimira Labs logo."
 }
